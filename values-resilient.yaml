@@ -1,12 +1,13 @@
 ---
 clusterGroup:
-  name: region-two
+  name: resilient
   isHubCluster: false
 
   namespaces:
     - golang-external-secrets
     - openshift-cnv
     - openshift-storage
+    - policies
     - gitops-vms
     - openshift-workload-availability:
         operatorGroup: true
@@ -33,7 +34,7 @@ clusterGroup:
       namespace: openshift-storage
 
   projects:
-    - region-two
+    - resilient
 
   imperative:
     jobs:
@@ -67,7 +68,7 @@ clusterGroup:
     ensure-openshift-console-plugins:
       name: ensure-openshift-console-plugins
       namespace: openshift-console
-      project: region-two
+      project: resilient
       chart: ensure-openshift-console-plugins
       chartVersion: 0.1.*
       extraValueFiles:
@@ -76,21 +77,21 @@ clusterGroup:
     golang-external-secrets:
       name: golang-external-secrets
       namespace: golang-external-secrets
-      project: region-two
+      project: resilient
       chart: golang-external-secrets
       chartVersion: 0.1.*
 
     openshift-cnv:
       name: openshift-cnv
       namespace: openshift-cnv
-      project: region-two
+      project: resilient
       chart: openshift-virtualization-instance
       chartVersion: 0.1.*
 
     odf:
       name: odf
       namespace: openshift-storage
-      project: region-two
+      project: resilient
       chart: openshift-data-foundations
       chartVersion: 0.2.*
       extraValueFiles:
@@ -99,7 +100,7 @@ clusterGroup:
     gitops-vms:
       name: gitops-vms
       namespace: gitops-vms
-      project: region-two
+      project: resilient
       chart: edge-gitops-vms
       chartVersion: 0.2.*
       extraValueFiles:
@@ -108,7 +109,7 @@ clusterGroup:
     node-health-check-operator:
       name: node-health-check-operator
       namespace: openshift-workload-availability
-      project: region-two
+      project: resilient
       chart: node-health-check-operator
       chartVersion: 0.1.*
 

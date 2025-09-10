@@ -5,14 +5,23 @@ clusterGroup:
     - open-cluster-management
     - vault
     - golang-external-secrets
+    - regional-dr
+    - regional-dr-trigger
+    - openshift-dr-system
+    - openshift-storage
   subscriptions:
     acm:
       name: advanced-cluster-management
       namespace: open-cluster-management
       channel: release-2.13
-      #csv: advanced-cluster-management.v2.6.1
+
+    odf-multicluster-orchestrator:
+      name: odf-multicluster-orchestrator
+      namespace: openshift-operators
+
   projects:
     - hub
+    - opp
   # Explicitly mention the cluster-state based overrides we plan to use for this pattern.
   # We can use self-referential variables because the chart calls the tpl function with these variables defined
   sharedValueFiles:
@@ -45,29 +54,53 @@ clusterGroup:
           kind: ManagedClusterInfo
           jsonPointers:
             - /spec/loggingCA
+
+    opp-policy:
+      name: opp-policy
+      namespace: openshift
+      project: opp
+      path: charts/hub/opp
+      ignoreDifferences:
+      - group: operators.openshift.io
+        kind: Console
+        jsonPointers:
+          - /spec/plugins
+
+    rdr:
+      name: regional-dr
+      namespace: regional-dr
+      project: opp
+      path: charts/hub/rdr
+
+    rdrtrigger:
+      name: regional-dr-trigger
+      namespace: regional-dr-trigger
+      project: opp
+      path: charts/hub/rdrtrigger
+
     vault:
       name: vault
       namespace: vault
       project: hub
       chart: hashicorp-vault
       chartVersion: 0.1.*
+
     golang-external-secrets:
       name: golang-external-secrets
       namespace: golang-external-secrets
       project: hub
       chart: golang-external-secrets
       chartVersion: 0.1.*
+
   imperative:
     verbosity: "-vvv"
     jobs: []
   managedClusterGroups:
-    region-one:
-      name: region-one
+    resilient:
+      name: resilient
+      helmOverrides:
+        - name: clusterGroup.isHubCluster
+          value: "false"
       acmlabels:
         - name: clusterGroup
-          value: region-one
-    region-two:
-      name: region-two
-      acmlabels:
-        - name: clusterGroup
-          value: region-two
+          value: resilient
