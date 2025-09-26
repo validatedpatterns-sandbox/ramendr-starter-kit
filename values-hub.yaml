@@ -64,6 +64,12 @@ clusterGroup:
       namespace: openshift
       project: opp
       path: charts/hub/opp
+      syncPolicy:
+        automated: {}
+        retry:
+          limit: 20
+        syncOptions:
+          - syncTimeout=600s
       ignoreDifferences:
       - group: operators.openshift.io
         kind: Console
