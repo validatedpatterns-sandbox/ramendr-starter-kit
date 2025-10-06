@@ -18,7 +18,7 @@ metadata:
 spec:
   clusterFence: Unfenced
   region: {{ $cluster.install_config.platform.aws.region }}
-  s3ProfileName: {{ $cluster.name }}-s3-profile
+  s3ProfileName: s3profile-{{ $cluster.name }}-ocs-storagecluster
   cidrs:
   - {{ (index $cluster.install_config.networking.machineNetwork 0).cidr }}
   - {{ (index $cluster.install_config.networking.clusterNetwork 0).cidr }}
