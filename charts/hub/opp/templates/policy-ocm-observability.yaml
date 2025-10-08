@@ -45,6 +45,40 @@ spec:
                 name: open-cluster-management-observability
         - complianceType: musthave
           objectDefinition:
+            apiVersion: v1
+            kind: ServiceAccount
+            metadata:
+              name: observability-controller-sa
+              namespace: open-cluster-management-observability
+        - complianceType: musthave
+          objectDefinition:
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: ClusterRole
+            metadata:
+              name: observability-controller-role
+            rules:
+            - apiGroups: ["observability.open-cluster-management.io"]
+              resources: ["multiclusterobservabilities"]
+              verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+            - apiGroups: [""]
+              resources: ["namespaces", "secrets", "configmaps"]
+              verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+        - complianceType: musthave
+          objectDefinition:
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: ClusterRoleBinding
+            metadata:
+              name: observability-controller-rolebinding
+            subjects:
+            - kind: ServiceAccount
+              name: observability-controller-sa
+              namespace: open-cluster-management-observability
+            roleRef:
+              kind: ClusterRole
+              name: observability-controller-role
+              apiGroup: rbac.authorization.k8s.io
+        - complianceType: musthave
+          objectDefinition:
             apiVersion: observability.open-cluster-management.io/v1beta2
             kind: MultiClusterObservability
             metadata:
@@ -63,5 +97,11 @@ spec:
                   retentionResolutionRaw: 5d
                   retentionResolution5m: 10d
                   retentionResolution1h: 1y
+              nodeSelector:
+                node-role.kubernetes.io/worker: ""
+              tolerations:
+              - key: node-role.kubernetes.io/master
+                operator: Exists
+                effect: NoSchedule
         remediationAction: enforce
         severity: medium

@@ -107,7 +107,8 @@ spec:
                       value: ""
                   restartPolicy: Never
                   serviceAccountName: ca-extractor-sa
-              backoffLimit: 3
+              backoffLimit: 1
+              activeDeadlineSeconds: 300
         - complianceType: musthave
           objectDefinition:
             apiVersion: v1

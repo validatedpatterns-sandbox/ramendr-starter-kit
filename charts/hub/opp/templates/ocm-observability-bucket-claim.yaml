@@ -3,6 +3,11 @@ kind: ObjectBucketClaim
 metadata:
   name: obc-observability
   namespace: openshift-storage
+  labels:
+    app.kubernetes.io/name: observability
+    app.kubernetes.io/component: storage
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
 spec:
   generateBucketName: obc-observability-bucket
   storageClassName: openshift-storage.noobaa.io
