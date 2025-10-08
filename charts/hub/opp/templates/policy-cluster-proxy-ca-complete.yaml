@@ -12,7 +12,8 @@ metadata:
     argocd.argoproj.io/hook: "PostSync"
     argocd.argoproj.io/sync-wave: "2"
   labels:
-    open-cluster-management.io/policy-set: openshift-plus
+    app.kubernetes.io/name: cluster-proxy-ca
+    app.kubernetes.io/component: policy
   name: policy-cluster-proxy-ca-complete
   namespace: open-cluster-management
 spec:

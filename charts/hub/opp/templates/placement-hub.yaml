@@ -2,7 +2,8 @@ apiVersion: apps.open-cluster-management.io/v1
 kind: PlacementRule
 metadata:
   labels:
-    open-cluster-management.io/policy-set: openshift-plus
+    app.kubernetes.io/name: placement-hub
+    app.kubernetes.io/component: placement
   name: placement-openshift-plus-hub
   namespace: open-cluster-management
   annotations:

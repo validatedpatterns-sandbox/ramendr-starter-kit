@@ -12,7 +12,8 @@ metadata:
     argocd.argoproj.io/hook: "PostSync"
     argocd.argoproj.io/sync-wave: "2"
   labels:
-    open-cluster-management.io/policy-set: openshift-plus
+    app.kubernetes.io/name: ocm-observability
+    app.kubernetes.io/component: policy
   name: policy-ocm-observability
   namespace: open-cluster-management
 spec:
