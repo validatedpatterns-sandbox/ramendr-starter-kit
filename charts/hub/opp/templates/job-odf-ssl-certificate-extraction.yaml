@@ -111,7 +111,7 @@ spec:
           
           # Extract CA from each managed cluster
           CA_FILES=("$WORK_DIR/hub-ca.crt")
-          local index=1
+          index=1
           
           for cluster in $MANAGED_CLUSTERS; do
             if [[ "$cluster" == "local-cluster" ]]; then
