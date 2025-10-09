@@ -17,7 +17,7 @@ metadata:
 rules:
 - apiGroups: [""]
   resources: ["configmaps", "secrets"]
-  verbs: ["get", "list", "create", "update", "patch"]
+  verbs: ["get", "list", "create", "update", "patch", "delete"]
 - apiGroups: ["config.openshift.io"]
   resources: ["proxies"]
   verbs: ["get", "patch"]
