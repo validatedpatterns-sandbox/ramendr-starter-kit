@@ -10,7 +10,7 @@ clusterGroup:
     - openshift-dr-system
     - openshift-storage
     - policies
-    #- regional-dr-trigger
+    # - regional-dr-trigger
   subscriptions:
     acm:
       name: advanced-cluster-management
@@ -19,7 +19,8 @@ clusterGroup:
 
     odf-multicluster-orchestrator:
       name: odf-multicluster-orchestrator
-      namespace: openshift-operators
+      namespace: openshift-dr-system
+      # namespace: openshift-operators
 
     openshift-data-foundation:
       name: odf-operator
