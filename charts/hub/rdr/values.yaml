@@ -82,6 +82,7 @@ regionalDR:
           pullSecret: ""
     # List of sync policy intervals: RPO should be larger than the sync time.
     # If your sync process takes 3 mins, the interval should be at least 4-5 mins.
-    intervals:
-      - 1m
-      - 2m
+    #  Disable temporarily while working out orchestration
+    intervals: []
+    #  - 1m
+    #  - 2m
