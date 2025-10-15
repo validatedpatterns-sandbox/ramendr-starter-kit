@@ -7,8 +7,6 @@ metadata:
     app.kubernetes.io/name: odf-dr-prerequisites
     app.kubernetes.io/component: health-check
   annotations:
-    argocd.argoproj.io/hook: "PreSync"
-    argocd.argoproj.io/hook-delete-policy: "HookSucceeded"
     argocd.argoproj.io/sync-wave: "3"
 spec:
   backoffLimit: 0

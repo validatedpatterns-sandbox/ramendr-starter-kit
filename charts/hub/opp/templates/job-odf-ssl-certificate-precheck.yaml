@@ -7,8 +7,6 @@ metadata:
     app.kubernetes.io/name: odf-ssl-certificate-management
     app.kubernetes.io/component: certificate-precheck
   annotations:
-    argocd.argoproj.io/hook: "PreSync"
-    argocd.argoproj.io/hook-delete-policy: "HookSucceeded"
     argocd.argoproj.io/sync-wave: "2"
 spec:
   backoffLimit: 3
