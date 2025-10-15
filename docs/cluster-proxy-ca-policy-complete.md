@@ -19,6 +19,7 @@ The complete cluster proxy CA policy system consists of multiple components that
 **Purpose:** Automatically discovers and extracts CA certificates from all clusters.
 
 **Features:**
+
 - Discovers all managed clusters via ACM
 - Extracts CA from `ManagedClusterInfo` resources
 - Falls back to direct cluster connection methods
@@ -30,6 +31,7 @@ The complete cluster proxy CA policy system consists of multiple components that
 **Purpose:** Sophisticated CA extraction using ACM's built-in CA information.
 
 **Features:**
+
 - Uses `ManagedClusterInfo.spec.loggingCA` as primary source
 - Falls back to cluster import/bootstrap secrets
 - Handles TLS secrets for CA extraction
@@ -41,6 +43,7 @@ The complete cluster proxy CA policy system consists of multiple components that
 **Purpose:** Distributes the CA bundle to all managed clusters.
 
 **Features:**
+
 - Creates policies that apply to managed clusters
 - Distributes CA bundle via ACM policies
 - Updates proxy configurations on managed clusters
@@ -51,6 +54,7 @@ The complete cluster proxy CA policy system consists of multiple components that
 **Purpose:** Ensures managed clusters have the CA bundle ConfigMap and proxy configuration.
 
 **Features:**
+
 - Creates `cluster-proxy-ca-bundle` ConfigMap on managed clusters
 - Updates proxy configuration to use the CA bundle
 - Applied via placement rules to all managed clusters
@@ -60,6 +64,7 @@ The complete cluster proxy CA policy system consists of multiple components that
 **Purpose:** Ensures policies are applied to all managed clusters.
 
 **Features:**
+
 - Targets all clusters in clustersets
 - Ensures clusters are available before applying policies
 - Provides proper policy distribution
@@ -67,6 +72,7 @@ The complete cluster proxy CA policy system consists of multiple components that
 ## How It Works
 
 ### Step 1: CA Extraction (Hub Cluster)
+
 ```bash
 # Hub cluster extracts its own CA
 oc get configmap -n openshift-config-managed trusted-ca-bundle -o jsonpath="{.data['ca-bundle\.crt']}"
@@ -78,22 +84,26 @@ oc get managedclusters -o jsonpath='{.items[*].metadata.name}'
 for cluster in $MANAGED_CLUSTERS; do
   # Method 1: ManagedClusterInfo
   oc get managedclusterinfo -n "$cluster" -o jsonpath='{.items[0].spec.loggingCA}'
-  
+
   # Method 2: Cluster secrets
   oc get secret -n "$cluster" -o jsonpath='{.items[?(@.metadata.name=="'$cluster'-import")].data.ca\.crt}' | base64 -d
 done
-```
+
+```text
 
 ### Step 2: CA Bundle Creation (Hub Cluster)
 ```bash
 # Creates combined CA bundle ConfigMap
 oc create configmap cluster-proxy-ca-bundle \
+
   --from-file=ca-bundle.crt="$CA_BUNDLE_FILE" \
+
   -n openshift-config
 
 # Updates hub cluster proxy
 oc patch proxy/cluster --type=merge --patch='{"spec":{"trustedCA":{"name":"cluster-proxy-ca-bundle"}}}'
-```
+
+```text
 
 ### Step 3: Policy Creation (Hub Cluster)
 The ACM-based policy automatically creates:
@@ -106,11 +116,13 @@ metadata:
   name: policy-cluster-proxy-ca-bundle-distribution
 spec:
   policy-templates:
+
   - objectDefinition:
       apiVersion: policy.open-cluster-management.io/v1beta1
       kind: ConfigurationPolicy
       spec:
         object-templates:
+
         - complianceType: musthave
           objectDefinition:
             apiVersion: v1
@@ -121,8 +133,8 @@ spec:
             data:
               ca-bundle.crt: |
                 # Combined CA bundle content
-```
 
+```text
 **Placement Rule:**
 ```yaml
 apiVersion: policy.open-cluster-management.io/v1beta1
@@ -131,25 +143,29 @@ metadata:
   name: placement-cluster-proxy-ca-bundle
 spec:
   clusterConditions:
+
   - type: ManagedClusterConditionAvailable
     status: "True"
   clusterSelector:
     matchExpressions:
+
     - key: cluster.open-cluster-management.io/clusterset
       operator: Exists
-```
+
+```text
 
 ### Step 4: Policy Distribution (ACM)
+
 ACM automatically:
+
 1. Applies the distribution policy to all managed clusters
 2. Creates the `cluster-proxy-ca-bundle` ConfigMap on each managed cluster
 3. Updates the proxy configuration on each managed cluster
 
 ## Usage
-
 ### Automatic Deployment
-The policies are automatically deployed when the hub policy set is applied. No manual configuration is required.
 
+The policies are automatically deployed when the hub policy set is applied. No manual configuration is required.
 ```bash
 # The policies will automatically:
 # 1. Extract CA certificates from all clusters
@@ -158,11 +174,12 @@ The policies are automatically deployed when the hub policy set is applied. No m
 # 4. Create distribution policies
 # 5. Distribute CA bundle to all managed clusters
 # 6. Update all managed cluster proxy configurations
-```
+
+```text
 
 ### Manual Trigger
-To manually trigger the process:
 
+To manually trigger the process:
 ```bash
 # Delete existing jobs to trigger recreation
 oc delete job extract-cluster-cas-dynamic -n openshift-config
@@ -170,10 +187,9 @@ oc delete job extract-cluster-cas-acm -n openshift-config
 oc delete job distribute-cluster-proxy-ca -n openshift-config
 
 # The policies will automatically recreate the jobs
-```
 
+```text
 ## Verification
-
 ### Hub Cluster Verification
 ```bash
 # Check if the ConfigMap exists on hub
@@ -184,7 +200,8 @@ oc get proxy cluster -o yaml
 
 # Verify the CA bundle content
 oc get configmap cluster-proxy-ca-bundle -n openshift-config -o jsonpath="{.data['ca-bundle\.crt']}"
-```
+
+```text
 
 ### Managed Cluster Verification
 ```bash
@@ -196,7 +213,8 @@ oc get configmap cluster-proxy-ca-bundle -n openshift-config --context=<managed-
 
 # Check proxy configuration on managed clusters
 oc get proxy cluster --context=<managed-cluster> -o yaml
-```
+
+```text
 
 ### Policy Status Verification
 ```bash
@@ -208,64 +226,70 @@ oc get placementrule placement-cluster-proxy-ca-bundle -n policies
 
 # Check policy distribution
 oc get policyreport -A | grep cluster-proxy-ca
-```
 
+```text
 ## Configuration
-
 ### No Manual Configuration Required
 
 The complete system requires **no manual configuration**. Everything is handled automatically:
-
 - **CA Discovery:** Uses ACM's existing cluster knowledge
-- **CA Extraction:** Multiple fallback methods for robust extraction
-- **CA Distribution:** ACM policies handle distribution to all clusters
-- **Proxy Updates:** Automatic proxy configuration updates
 
+- **CA Extraction:** Multiple fallback methods for robust extraction
+
+- **CA Distribution:** ACM policies handle distribution to all clusters
+
+- **Proxy Updates:** Automatic proxy configuration updates
 ### RBAC Permissions
 
 The policies automatically create the necessary RBAC permissions:
-
 ```yaml
 # Service Accounts
+
 - ca-extractor-sa (for CA extraction)
+
 - ca-distributor-sa (for CA distribution)
 
 # Cluster Roles
+
 - ca-extractor-role (CA extraction permissions)
+
 - ca-distributor-role (CA distribution permissions)
 
 # Cluster Role Bindings
+
 - ca-extractor-rolebinding
+
 - ca-distributor-rolebinding
-```
 
+```text
 ## Troubleshooting
-
 ### Common Issues
 
 1. **CA Extraction Fails**
    ```bash
    # Check job logs
    oc logs job/extract-cluster-cas-acm -n openshift-config
-   
+
    # Verify RBAC permissions
    oc auth can-i get managedclusterinfos --as=system:serviceaccount:openshift-config:ca-extractor-sa
    ```
 
-2. **Policy Distribution Fails**
+1. **Policy Distribution Fails**
+
    ```bash
    # Check policy status
    oc get policy policy-cluster-proxy-ca-bundle-distribution -n policies
-   
+
    # Check placement rule
    oc get placementrule placement-cluster-proxy-ca-bundle -n policies
    ```
 
-3. **Managed Cluster ConfigMap Missing**
+2. **Managed Cluster ConfigMap Missing**
+
    ```bash
    # Check if policy is applied to managed cluster
    oc get policy -n <managed-cluster> | grep cluster-proxy-ca
-   
+
    # Check policy compliance
    oc get policyreport -n <managed-cluster> | grep cluster-proxy-ca
    ```
@@ -284,45 +308,62 @@ for cluster in $(oc get managedclusters -o jsonpath='{.items[*].metadata.name}')
   echo "=== $cluster ==="
   oc get configmap cluster-proxy-ca-bundle -n openshift-config --context="$cluster" -o jsonpath="{.data['ca-bundle\.crt']}" | wc -l
 done
-```
 
+```text
 ## Advantages
-
 ### Complete Automation
+
 - **Zero Configuration:** No manual CA certificate management
+
 - **Automatic Discovery:** Uses ACM's existing cluster knowledge
+
 - **Dynamic Updates:** Adapts when new clusters are added
+
 - **Self-Healing:** Automatically retries and updates
-
 ### Comprehensive Coverage
-- **Hub Cluster:** CA bundle created and proxy updated
-- **All Managed Clusters:** CA bundle distributed and proxy updated
-- **Regional DR Clusters:** Specifically handled for disaster recovery
-- **Policy-Based:** Uses ACM's policy framework for reliable distribution
 
+- **Hub Cluster:** CA bundle created and proxy updated
+
+- **All Managed Clusters:** CA bundle distributed and proxy updated
+
+- **Regional DR Clusters:** Specifically handled for disaster recovery
+
+- **Policy-Based:** Uses ACM's policy framework for reliable distribution
 ### Security and Reliability
+
 - **Multiple Extraction Methods:** Robust CA extraction with fallbacks
+
 - **Certificate Deduplication:** Automatic removal of duplicate certificates
+
 - **Policy-Based Distribution:** Reliable distribution via ACM policies
+
 - **Compliance Monitoring:** ACM policy compliance monitoring
 
 ## Maintenance
-
 ### Automatic Updates
+
 - Policies automatically update when new clusters are added
+
 - CA certificates are refreshed when cluster configurations change
+
 - No manual intervention required for normal operations
-
 ### Monitoring
-- Monitor job completion status
-- Set up alerts for failed CA extraction or distribution
-- Monitor ConfigMap changes across all clusters
-- Track policy compliance status
 
+- Monitor job completion status
+
+- Set up alerts for failed CA extraction or distribution
+
+- Monitor ConfigMap changes across all clusters
+
+- Track policy compliance status
 ### Cleanup
+
 - Old jobs are automatically cleaned up
+
 - ConfigMaps are updated in-place
+
 - Policies are automatically maintained
+
 - No manual cleanup required
 
 This complete solution provides a robust, automated, and comprehensive approach to managing CA certificates across all clusters in a multicluster OpenShift environment.

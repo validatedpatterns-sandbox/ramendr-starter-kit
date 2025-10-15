@@ -18,6 +18,7 @@ The complete solution consists of:
 ### Hub Cluster Components
 
 **1. CA Extraction Job (`extract-and-distribute-cas`)**
+
 - Extracts CA from hub cluster's `trusted-ca-bundle` ConfigMap
 - Discovers all managed clusters via ACM
 - Extracts CAs from managed clusters using `ManagedClusterInfo`
@@ -26,48 +27,57 @@ The complete solution consists of:
 - Creates distribution policies for managed clusters
 
 **2. Distribution Policy (`policy-cluster-proxy-ca-bundle-distribution`)**
+
 - Ensures managed clusters have the CA bundle ConfigMap
 - Updates managed cluster proxy configurations
 - Applied via placement rules to all managed clusters
 
-**3. Placement Configuration**
+#### 3. Placement Configuration
+
 - **PlacementRule:** `placement-cluster-proxy-ca-bundle` - Targets all available managed clusters
 - **PlacementBinding:** `binding-cluster-proxy-ca-bundle` - Links policy to placement rule
 
 ### Managed Cluster Components
 
-**1. CA Bundle ConfigMap**
+#### 1. CA Bundle ConfigMap
+
 - Name: `cluster-proxy-ca-bundle`
 - Namespace: `openshift-config`
 - Contains combined CA certificates from all clusters
 
-**2. Proxy Configuration**
+#### 2. Proxy Configuration
+
 - Updated to use `cluster-proxy-ca-bundle` ConfigMap
 - Enables secure communication between clusters
 
 ## Current Status
 
 ### ✅ Hub Cluster
+
 - **ConfigMap:** `cluster-proxy-ca-bundle` exists with 148 certificates
 - **Proxy:** Configured to use the CA bundle
 - **Status:** Fully operational
 
 ### ✅ Managed Clusters
+
 - **Policy Status:** Compliant on all clusters (local-cluster, ocp-primary, ocp-secondary)
 - **Distribution:** CA bundle automatically distributed via ACM policies
 - **Proxy Updates:** All managed cluster proxies updated to use the CA bundle
 
 ### ✅ Policy Compliance
-```
+
+```text
 Status: Compliant
 Clusters:
+
 - local-cluster: Compliant
-- ocp-primary: Compliant  
+
+- ocp-primary: Compliant
+
 - ocp-secondary: Compliant
-```
 
+```text
 ## Verification Commands
-
 ### Check Hub Cluster Status
 ```bash
 # Verify ConfigMap exists
@@ -78,7 +88,8 @@ oc get proxy cluster -o jsonpath='{.spec.trustedCA.name}'
 
 # Count certificates
 oc get configmap cluster-proxy-ca-bundle -n openshift-config -o jsonpath="{.data['ca-bundle\.crt']}" | grep -c 'BEGIN CERTIFICATE'
-```
+
+```text
 
 ### Check Policy Status
 ```bash
@@ -90,7 +101,8 @@ oc get placementrule placement-cluster-proxy-ca-bundle -n policies
 
 # Check placement binding
 oc get placementbinding binding-cluster-proxy-ca-bundle -n policies
-```
+
+```text
 
 ### Check Managed Cluster Compliance
 ```bash
@@ -99,8 +111,8 @@ oc get policy policy-cluster-proxy-ca-bundle-distribution -n policies -o yaml | 
 
 # Run verification script
 ./scripts/verify-ca-distribution.sh
-```
 
+```text
 ## Automatic Updates
 
 The solution automatically:
@@ -113,13 +125,13 @@ The solution automatically:
 6. **Maintains compliance** across all clusters
 
 ## Manual Operations
-
 ### Force Policy Update
 ```bash
 # Disable and re-enable policy to force update
 oc patch policy policy-cluster-proxy-ca-bundle-distribution -n policies --type=merge --patch='{"spec":{"disabled":true}}'
 oc patch policy policy-cluster-proxy-ca-bundle-distribution -n policies --type=merge --patch='{"spec":{"disabled":false}}'
-```
+
+```text
 
 ### Manual CA Bundle Update
 ```bash
@@ -131,7 +143,8 @@ oc patch policy policy-cluster-proxy-ca-bundle-distribution -n policies --type=m
 
 # Update with all available managed cluster CAs
 ./scripts/update-ca-bundle.sh update-all
-```
+
+```text
 
 ### Troubleshooting
 ```bash
@@ -143,57 +156,66 @@ oc get policy policy-cluster-proxy-ca-bundle-distribution -n policies -o yaml
 
 # Run comprehensive verification
 ./scripts/verify-ca-distribution.sh
-```
 
+```text
 ## Benefits
-
 ### ✅ Complete Automation
 - **Zero Manual Configuration** - Everything is handled automatically
-- **Dynamic Updates** - Adapts when new clusters are added
-- **Self-Healing** - Automatically retries and updates
 
+- **Dynamic Updates** - Adapts when new clusters are added
+
+- **Self-Healing** - Automatically retries and updates
 ### ✅ Comprehensive Coverage
 - **Hub Cluster** - CA bundle created and proxy updated
-- **All Managed Clusters** - CA bundle distributed and proxy updated
-- **Policy-Based Distribution** - Reliable distribution via ACM policies
 
+- **All Managed Clusters** - CA bundle distributed and proxy updated
+
+- **Policy-Based Distribution** - Reliable distribution via ACM policies
 ### ✅ Security and Reliability
 - **Multiple Extraction Methods** - Robust CA extraction with fallbacks
+
 - **Certificate Deduplication** - Automatic removal of duplicate certificates
+
 - **Policy Compliance Monitoring** - ACM policy compliance monitoring
+
 - **Secure Distribution** - Uses ACM's secure policy framework
 
 ## Maintenance
-
 ### Automatic Operations
 - Policies automatically update when new clusters are added
-- CA certificates are refreshed when cluster configurations change
-- No manual intervention required for normal operations
 
+- CA certificates are refreshed when cluster configurations change
+
+- No manual intervention required for normal operations
 ### Monitoring
 - Monitor policy compliance status across all clusters
-- Set up alerts for failed CA extraction or distribution
-- Monitor ConfigMap changes across all clusters
-- Track certificate expiration dates
 
+- Set up alerts for failed CA extraction or distribution
+
+- Monitor ConfigMap changes across all clusters
+
+- Track certificate expiration dates
 ### Cleanup
 - Old jobs are automatically cleaned up
+
 - ConfigMaps are updated in-place
+
 - Policies are automatically maintained
+
 - No manual cleanup required
 
 ## Files Created
-
 ### Policies
 - `charts/hub/opp/templates/policy-cluster-proxy-ca-complete.yaml` - Complete CA extraction and distribution policy
-
 ### Scripts
 - `scripts/verify-ca-distribution.sh` - Comprehensive verification script
-- `scripts/update-ca-bundle.sh` - Manual CA bundle management script
-- `scripts/manual-ca-extraction.sh` - Manual CA extraction fallback
 
+- `scripts/update-ca-bundle.sh` - Manual CA bundle management script
+
+- `scripts/manual-ca-extraction.sh` - Manual CA extraction fallback
 ### Documentation
 - `docs/ca-bundle-complete-solution.md` - This comprehensive documentation
+
 - `docs/sync-timeout-fix.md` - Sync timeout troubleshooting guide
 
 ## Result
@@ -201,7 +223,7 @@ oc get policy policy-cluster-proxy-ca-bundle-distribution -n policies -o yaml
 The complete solution provides:
 
 ✅ **Automatic CA Extraction** - From hub and all managed clusters
-✅ **Combined CA Bundle Creation** - Unified bundle with all certificates  
+✅ **Combined CA Bundle Creation** - Unified bundle with all certificates
 ✅ **Hub Cluster Proxy Update** - Hub cluster uses the CA bundle
 ✅ **Distribution to Managed Clusters** - CA bundle distributed via ACM policies
 ✅ **Managed Cluster Proxy Updates** - All managed clusters use the distributed bundle

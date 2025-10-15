@@ -48,4 +48,4 @@ git merge -s subtree -Xtheirs -Xsubtree=common common-upstream/main
 
 ## Secrets
 
-There are two different secret formats parsed by the ansible bits. Both are documented [here](https://github.com/validatedpatterns/common/tree/main/ansible/roles/vault_utils/README.md)
+There are two different secret formats parsed by the ansible bits. Both are documented [in the vault utils documentation](https://github.com/validatedpatterns/common/tree/main/ansible/roles/vault_utils/README.md)
