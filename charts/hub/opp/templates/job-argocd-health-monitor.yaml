@@ -176,8 +176,15 @@ spec:
               ((attempt++))
             done
             
-            # MAXIMUM VIOLENCE: Delete and recreate the namespace
-            echo "  💥 MAXIMUM VIOLENCE: Deleting and recreating $ARGOCD_NAMESPACE namespace..."
+            # MAXIMUM VIOLENCE: Remove finalizers and delete namespace
+            echo "  💥 MAXIMUM VIOLENCE: Removing finalizers and deleting $ARGOCD_NAMESPACE namespace..."
+            
+            # Remove finalizers from the namespace to allow deletion
+            echo "  🔧 Removing finalizers from $ARGOCD_NAMESPACE namespace..."
+            oc --kubeconfig="$kubeconfig" patch namespace "$ARGOCD_NAMESPACE" --type=merge -p='{"metadata":{"finalizers":[]}}' &>/dev/null || true
+            
+            # Delete the namespace
+            echo "  💥 Deleting $ARGOCD_NAMESPACE namespace..."
             oc --kubeconfig="$kubeconfig" delete namespace "$ARGOCD_NAMESPACE" --grace-period=0 --force &>/dev/null || true
             
             # Wait for namespace to be deleted
@@ -193,19 +200,16 @@ spec:
               ((attempt++))
             done
             
-            # Recreate the namespace
-            echo "  🔄 Recreating $ARGOCD_NAMESPACE namespace..."
-            oc --kubeconfig="$kubeconfig" create namespace "$ARGOCD_NAMESPACE" &>/dev/null || true
-            
-            # Wait for namespace to be ready
-            echo "  ⏳ Waiting for namespace to be ready..."
+            # Wait for ACM to recreate the namespace automatically
+            echo "  ⏳ Waiting for ACM to recreate $ARGOCD_NAMESPACE namespace..."
+            echo "  This may take a couple of minutes..."
             attempt=1
-            while [[ $attempt -le 20 ]]; do
+            while [[ $attempt -le 24 ]]; do  # 24 attempts × 5 seconds = 2 minutes
               if oc --kubeconfig="$kubeconfig" get namespace "$ARGOCD_NAMESPACE" &>/dev/null; then
-                echo "  ✅ Namespace $ARGOCD_NAMESPACE recreated"
+                echo "  ✅ Namespace $ARGOCD_NAMESPACE recreated by ACM"
                 break
               fi
-              echo "  Waiting for namespace to be ready... (attempt $attempt/20)"
+              echo "  Waiting for ACM to recreate namespace... (attempt $attempt/24)"
               sleep 5
               ((attempt++))
             done
