@@ -69,8 +69,9 @@ spec:
                 
                 # Check if the cluster-specific ArgoCD namespace exists
                 if ! oc --kubeconfig="$kubeconfig" get namespace "$cluster_argocd_namespace" &>/dev/null; then
-                  echo "❌ Cluster-specific ArgoCD namespace $cluster_argocd_namespace not found on $cluster - cluster appears wedged"
-                  return 0
+                  echo "⚠️  Cluster-specific ArgoCD namespace $cluster_argocd_namespace not found on $cluster - ArgoCD may not be installed yet"
+                  echo "✅ $cluster appears healthy (no cluster-specific ArgoCD installed yet)"
+                  return 1
                 fi
                 
                 # Check if the cluster-specific ArgoCD instance exists and is running
@@ -78,8 +79,9 @@ spec:
                 echo "Found $cluster_argocd_pods ArgoCD server pods in $cluster_argocd_namespace namespace on $cluster"
                 
                 if [[ $cluster_argocd_pods -eq 0 ]]; then
-                  echo "❌ No ArgoCD server pods found in $cluster_argocd_namespace namespace on $cluster - cluster appears wedged"
-                  return 0
+                  echo "⚠️  No ArgoCD server pods found in $cluster_argocd_namespace namespace on $cluster - ArgoCD may not be running yet"
+                  echo "✅ $cluster appears healthy (no cluster-specific ArgoCD running yet)"
+                  return 1
                 elif [[ $cluster_argocd_pods -eq 1 ]]; then
                   echo "❌ Only 1 ArgoCD server pod found in $cluster_argocd_namespace namespace on $cluster (expected 2) - cluster appears wedged"
                   return 0
