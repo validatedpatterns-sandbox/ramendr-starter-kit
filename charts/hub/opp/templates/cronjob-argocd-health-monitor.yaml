@@ -392,17 +392,14 @@ spec:
                   done
                   
                   echo "✅ Remediation completed for wedged clusters"
-                else
-                  echo "✅ All clusters are healthy"
-                fi
-                
-                # Wait before next check
-                if [[ $attempt -lt $MAX_ATTEMPTS ]]; then
-                  echo "Waiting $SLEEP_INTERVAL seconds before next check..."
+                  echo "⏳ Waiting for remediated clusters to recover before next check..."
                   sleep $SLEEP_INTERVAL
+                  ((attempt++))
+                else
+                  echo "✅ All clusters are healthy - health monitoring completed successfully"
+                  echo "🎉 ArgoCD health monitoring completed successfully"
+                  exit 0
                 fi
-                
-                ((attempt++))
               done
               
               echo "🎉 ArgoCD health monitoring completed"
