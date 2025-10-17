@@ -31,11 +31,11 @@ spec:
               
               echo "Starting ArgoCD health monitoring and remediation..."
               
-          # Configuration
-          MAX_ATTEMPTS=5  # Check 5 times before failing
-          SLEEP_INTERVAL=20
-          ARGOCD_NAMESPACE="openshift-gitops"
-          HEALTH_CHECK_TIMEOUT=30
+              # Configuration
+              MAX_ATTEMPTS=5  # Check 5 times before failing
+              SLEEP_INTERVAL=20
+              ARGOCD_NAMESPACE="openshift-gitops"
+              HEALTH_CHECK_TIMEOUT=30
               
               # Function to check if a cluster is wedged
               check_cluster_wedged() {
