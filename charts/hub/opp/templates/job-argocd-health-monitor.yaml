@@ -25,7 +25,7 @@ spec:
           echo "Starting ArgoCD health monitoring and remediation..."
           
           # Configuration
-          MAX_ATTEMPTS=5
+          MAX_ATTEMPTS=5  # Check 5 times before failing
           SLEEP_INTERVAL=30
           ARGOCD_NAMESPACE="openshift-gitops"
           HEALTH_CHECK_TIMEOUT=60
@@ -461,35 +461,24 @@ spec:
               fi
             done
             
-            # If there are kubeconfig failures, check if clusters are still coming up
+            # If there are kubeconfig failures, wait and retry (up to MAX_ATTEMPTS)
             if [[ ${#kubeconfig_failures[@]} -gt 0 ]]; then
               echo "⚠️  Kubeconfig failures detected: ${kubeconfig_failures[*]}"
               echo "This may indicate clusters are still starting up or there are connectivity issues"
+              echo "Attempt $attempt/$MAX_ATTEMPTS - will retry if attempts remain"
               
-              # Check if any of the failed clusters are still not available/joined
-              still_starting=false
-              for failed_cluster in "${kubeconfig_failures[@]}"; do
-                cluster_status=$(oc get managedcluster "$failed_cluster" -o jsonpath='{.status.conditions[?(@.type=="ManagedClusterConditionAvailable")].status}' 2>/dev/null || echo "Unknown")
-                joined_status=$(oc get managedcluster "$failed_cluster" -o jsonpath='{.status.conditions[?(@.type=="ManagedClusterJoined")].status}' 2>/dev/null || echo "Unknown")
-                
-                if [[ "$cluster_status" != "True" || "$joined_status" != "True" ]]; then
-                  echo "  Cluster $failed_cluster is still starting up (available: $cluster_status, joined: $joined_status)"
-                  still_starting=true
-                fi
-              done
-              
-              if [[ "$still_starting" == "true" ]]; then
-                echo "⏳ Some clusters are still starting up - waiting for them to be ready"
-                echo "This is normal during initial cluster deployment"
+              # If this is the last attempt, fail
+              if [[ $attempt -ge $MAX_ATTEMPTS ]]; then
+                echo "❌ FINAL ATTEMPT FAILED: Cannot access clusters after $MAX_ATTEMPTS attempts"
+                echo "This indicates a problem with cluster deployment, connectivity, or kubeconfig secrets"
+                echo "Failed clusters: ${kubeconfig_failures[*]}"
+                echo "The health monitor cannot function without valid kubeconfigs"
+                exit 1
+              else
+                echo "⏳ Waiting for clusters to be ready before next attempt..."
                 sleep $SLEEP_INTERVAL
                 ((attempt++))
                 continue
-              else
-                echo "❌ Critical error: Cannot access clusters due to kubeconfig issues: ${kubeconfig_failures[*]}"
-                echo "All clusters appear to be available and joined, but kubeconfig access is failing"
-                echo "This indicates a problem with cluster connectivity or kubeconfig secrets"
-                echo "The health monitor cannot function without valid kubeconfigs"
-                exit 1
               fi
             fi
             
