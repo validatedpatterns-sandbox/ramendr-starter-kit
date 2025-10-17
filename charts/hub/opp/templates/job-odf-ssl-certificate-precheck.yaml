@@ -475,7 +475,7 @@ spec:
                     echo ""
                     echo "This follows Red Hat ODF Disaster Recovery certificate management guidelines"
                     echo "for secure SSL access across clusters in the regional DR setup."
-EOF
+            EOF
             
             echo "Certificate extraction job created"
             
