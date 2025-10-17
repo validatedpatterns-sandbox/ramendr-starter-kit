@@ -116,13 +116,10 @@ spec:
                   echo "✅ $cluster appears healthy (no ArgoCD instances running yet)"
                   return 1
                 elif [[ $cluster_argocd_pods -eq 1 ]]; then
-                  echo "❌ Only 1 gitops-server pod found in $cluster_argocd_namespace namespace on $cluster (expected 2) - cluster appears wedged"
-                  return 0
-                elif [[ $cluster_argocd_pods -eq 2 ]]; then
-                  echo "✅ Found 2 $cluster_argocd_instance pods in $cluster_argocd_namespace namespace on $cluster - cluster appears healthy"
+                  echo "✅ Found 1 $cluster_argocd_instance pod in $cluster_argocd_namespace namespace on $cluster - cluster appears healthy"
                   return 1
                 else
-                  echo "⚠️  Found $cluster_argocd_pods $cluster_argocd_instance pods in $cluster_argocd_namespace namespace on $cluster (expected 2) - cluster may be wedged"
+                  echo "⚠️  Found $cluster_argocd_pods $cluster_argocd_instance pods in $cluster_argocd_namespace namespace on $cluster (expected 1) - cluster may be wedged"
                   return 0
                 fi
               }

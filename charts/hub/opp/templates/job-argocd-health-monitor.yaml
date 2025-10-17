@@ -160,36 +160,10 @@ spec:
                   echo "✅ $cluster appears healthy (no ArgoCD instances running yet)"
                   return 1
                 elif [[ $cluster_argocd_pods -eq 1 ]]; then
-                  echo "⚠️  Only 1 gitops-server pod found in $cluster_argocd_namespace namespace on $cluster (expected 2)"
-                  
-                  # Check if the openshift-gitops instance has been running for more than 10 minutes
-                  echo "🔍 Checking if openshift-gitops instance has been running for more than 10 minutes..."
-                  local openshift_gitops_pod_age=$(oc --kubeconfig="$kubeconfig" get pods -n "$ARGOCD_NAMESPACE" -l app.kubernetes.io/name=openshift-gitops-server --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.creationTimestamp}' 2>/dev/null || echo "")
-                  
-                  if [[ -n "$openshift_gitops_pod_age" ]]; then
-                    # Convert creation timestamp to seconds since epoch
-                    local pod_creation_epoch=$(date -d "$openshift_gitops_pod_age" +%s 2>/dev/null || echo "0")
-                    local current_epoch=$(date +%s)
-                    local pod_age_minutes=$(( (current_epoch - pod_creation_epoch) / 60 ))
-                    
-                    echo "  openshift-gitops pod age: $pod_age_minutes minutes"
-                    
-                    if [[ $pod_age_minutes -ge 10 ]]; then
-                      echo "❌ openshift-gitops instance has been running for $pod_age_minutes minutes (>10) - cluster appears wedged"
-                      return 0
-                    else
-                      echo "⏳ openshift-gitops instance has only been running for $pod_age_minutes minutes (<10) - giving it more time to self-heal"
-                      return 1
-                    fi
-                  else
-                    echo "⚠️  Could not determine openshift-gitops pod age - assuming it needs more time"
-                    return 1
-                  fi
-                elif [[ $cluster_argocd_pods -eq 2 ]]; then
-                  echo "✅ Found 2 $cluster_argocd_instance pods in $cluster_argocd_namespace namespace on $cluster - cluster appears healthy"
+                  echo "✅ Found 1 $cluster_argocd_instance pod in $cluster_argocd_namespace namespace on $cluster - cluster appears healthy"
                   return 1
                 else
-                  echo "⚠️  Found $cluster_argocd_pods $cluster_argocd_instance pods in $cluster_argocd_namespace namespace on $cluster (expected 2)"
+                  echo "⚠️  Found $cluster_argocd_pods $cluster_argocd_instance pods in $cluster_argocd_namespace namespace on $cluster (expected 1)"
                   
                   # Check if the openshift-gitops instance has been running for more than 10 minutes
                   echo "🔍 Checking if openshift-gitops instance has been running for more than 10 minutes..."
