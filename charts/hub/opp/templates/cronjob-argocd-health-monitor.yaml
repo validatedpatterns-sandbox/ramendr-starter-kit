@@ -278,10 +278,22 @@ spec:
                 MANAGED_CLUSTERS=$(oc get managedclusters -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
                 
                 if [[ -z "$MANAGED_CLUSTERS" ]]; then
-                  echo "No managed clusters found"
-                  sleep $SLEEP_INTERVAL
-                  ((attempt++))
-                  continue
+                  echo "❌ CRITICAL ERROR: No managed clusters found"
+                  echo ""
+                  echo "The ArgoCD health monitor requires managed clusters to function properly."
+                  echo "Without managed clusters, there are no targets for health monitoring."
+                  echo ""
+                  echo "This may indicate:"
+                  echo "  - Managed clusters have not been created yet"
+                  echo "  - Managed clusters have been deleted"
+                  echo "  - There is a connectivity issue with the hub cluster"
+                  echo "  - The OpenShift Cluster Manager is not properly configured"
+                  echo ""
+                  echo "The health monitor cannot function without managed clusters."
+                  echo "Please ensure managed clusters are created and available."
+                  echo ""
+                  echo "Job will exit with error code 1."
+                  exit 1
                 fi
                 
                 echo "Found managed clusters: $MANAGED_CLUSTERS"
