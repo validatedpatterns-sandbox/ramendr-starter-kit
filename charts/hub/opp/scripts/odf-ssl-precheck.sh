@@ -142,9 +142,44 @@ spec:
           echo "Starting ODF SSL certificate extraction and distribution..."
           echo "Following Red Hat ODF Disaster Recovery certificate management guidelines"
           
-          WORK_DIR="/tmp/odf-ssl-certs"
-          mkdir -p "$WORK_DIR"
-          cd "$WORK_DIR"
+          # Configuration for retry logic
+          MAX_RETRIES=5
+          BASE_DELAY=30
+          MAX_DELAY=300
+          RETRY_COUNT=0
+          
+          # Function to implement exponential backoff
+          exponential_backoff() {
+            local delay=$((BASE_DELAY * (2 ** RETRY_COUNT)))
+            if [[ $delay -gt $MAX_DELAY ]]; then
+              delay=$MAX_DELAY
+            fi
+            echo "⏳ Waiting $delay seconds before retry (attempt $((RETRY_COUNT + 1))/$MAX_RETRIES)..."
+            sleep $delay
+            ((RETRY_COUNT++))
+          }
+          
+          # Function to handle errors gracefully
+          handle_error() {
+            local error_msg="$1"
+            echo "❌ Error: $error_msg"
+            
+            if [[ $RETRY_COUNT -lt $MAX_RETRIES ]]; then
+              echo "🔄 Retrying in a moment..."
+              exponential_backoff
+              return 0
+            else
+              echo "💥 Max retries exceeded. Job will exit but ArgoCD can retry the sync."
+              echo "   This is a temporary failure - the job will be retried on next ArgoCD sync."
+              exit 1
+            fi
+          }
+          
+          # Main execution with retry logic
+          main_execution() {
+            WORK_DIR="/tmp/odf-ssl-certs"
+            mkdir -p "$WORK_DIR"
+            cd "$WORK_DIR"
           
           extract_cluster_ca() {
             cluster_name="$1"
@@ -497,6 +532,25 @@ spec:
           echo ""
           echo "This follows Red Hat ODF Disaster Recovery certificate management guidelines"
           echo "for secure SSL access across clusters in the regional DR setup."
+          }
+          
+          # Execute main function with retry logic
+          while true; do
+            if main_execution; then
+              echo "🎉 Certificate extraction completed successfully!"
+              exit 0
+            else
+              if [[ $RETRY_COUNT -lt $MAX_RETRIES ]]; then
+                echo "🔄 Main execution failed, retrying..."
+                exponential_backoff
+                continue
+              else
+                echo "💥 Max retries exceeded. Job will exit but ArgoCD can retry the sync."
+                echo "   This is a temporary failure - the job will be retried on next ArgoCD sync."
+                exit 1
+              fi
+            fi
+          done
 EOF
   
   echo "Certificate extraction job created"
