@@ -38,7 +38,7 @@ clusterGroup:
       namespace: openshift-storage
 
     openshift-oadp:
-      name: oadp-operator
+      name: redhat-oadp-operator
       namespace: openshift-adp
       channel: stable-1.4
 
