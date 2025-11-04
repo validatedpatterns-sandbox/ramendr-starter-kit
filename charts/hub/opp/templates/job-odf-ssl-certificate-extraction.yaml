@@ -378,22 +378,22 @@ spec:
           }
           
           # Update ramen-hub-operator-config with base64-encoded CA bundle
-          echo "7b. Updating ramen-hub-operator-config in openshift-gitops namespace..."
+          echo "7b. Updating ramen-hub-operator-config in openshift-operators namespace..."
           
           # Base64 encode the combined CA bundle
           CA_BUNDLE_BASE64=$(base64 -w 0 < "$WORK_DIR/combined-ca-bundle.crt" 2>/dev/null || base64 < "$WORK_DIR/combined-ca-bundle.crt" | tr -d '\n')
           
           # Check if ramen-hub-operator-config exists
-          if oc get configmap ramen-hub-operator-config -n openshift-gitops &>/dev/null; then
+          if oc get configmap ramen-hub-operator-config -n openshift-operators &>/dev/null; then
             echo "  ConfigMap exists, patching with base64-encoded CA bundle..."
-            oc patch configmap ramen-hub-operator-config -n openshift-gitops \
+            oc patch configmap ramen-hub-operator-config -n openshift-operators \
               --type=merge \
               --patch="{\"data\":{\"caCertificates\":\"$CA_BUNDLE_BASE64\"}}" || {
               echo "  Warning: Could not patch ramen-hub-operator-config"
             }
           else
             echo "  ConfigMap does not exist, creating with base64-encoded CA bundle..."
-            oc create configmap ramen-hub-operator-config -n openshift-gitops \
+            oc create configmap ramen-hub-operator-config -n openshift-operators \
               --from-literal=caCertificates="$CA_BUNDLE_BASE64" || {
               echo "  Warning: Could not create ramen-hub-operator-config"
             }
