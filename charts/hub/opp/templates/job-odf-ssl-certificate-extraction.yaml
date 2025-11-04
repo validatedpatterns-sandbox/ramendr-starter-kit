@@ -442,6 +442,62 @@ spec:
           echo "  ramen-hub-operator-config updated successfully with base64-encoded CA bundle"
           echo "  This enables SSL access for discovered applications in ODF Disaster Recovery"
           
+          # Restart ramen-hub-operator pod to pick up the new configuration
+          echo "7c. Restarting ramen-hub-operator pod to apply new CA certificates..."
+          
+          # Find the ramen-hub-operator pod
+          RAMEN_POD=$(oc get pod -n openshift-operators -l app=ramen-hub-operator -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+          
+          if [[ -n "$RAMEN_POD" ]]; then
+            echo "  Found ramen-hub-operator pod: $RAMEN_POD"
+            echo "  Deleting pod to trigger restart..."
+            
+            oc delete pod "$RAMEN_POD" -n openshift-operators --ignore-not-found=true || {
+              echo "  Warning: Could not delete ramen-hub-operator pod"
+            }
+            
+            # Wait for pod to be deleted
+            echo "  Waiting for pod to be terminated..."
+            oc wait --for=delete pod/"$RAMEN_POD" -n openshift-operators --timeout=60s 2>/dev/null || true
+            
+            # Wait for new pod to be running
+            echo "  Waiting for new ramen-hub-operator pod to be running..."
+            MAX_WAIT_ATTEMPTS=30
+            WAIT_INTERVAL=10
+            attempt=0
+            
+            while [[ $attempt -lt $MAX_WAIT_ATTEMPTS ]]; do
+              attempt=$((attempt + 1))
+              
+              NEW_RAMEN_POD=$(oc get pod -n openshift-operators -l app=ramen-hub-operator -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+              
+              if [[ -n "$NEW_RAMEN_POD" && "$NEW_RAMEN_POD" != "$RAMEN_POD" ]]; then
+                POD_STATUS=$(oc get pod "$NEW_RAMEN_POD" -n openshift-operators -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
+                
+                if [[ "$POD_STATUS" == "Running" ]]; then
+                  echo "  ✅ New ramen-hub-operator pod is running: $NEW_RAMEN_POD"
+                  break
+                else
+                  echo "  ⏳ New pod status: $POD_STATUS (attempt $attempt/$MAX_WAIT_ATTEMPTS)"
+                fi
+              else
+                echo "  ⏳ Waiting for new pod to appear (attempt $attempt/$MAX_WAIT_ATTEMPTS)"
+              fi
+              
+              if [[ $attempt -lt $MAX_WAIT_ATTEMPTS ]]; then
+                sleep $WAIT_INTERVAL
+              fi
+            done
+            
+            if [[ $attempt -ge $MAX_WAIT_ATTEMPTS ]]; then
+              echo "  ⚠️  Warning: New ramen-hub-operator pod did not become ready within expected time"
+              echo "   The pod may still be starting - configuration changes will be applied when it's ready"
+            fi
+          else
+            echo "  ⚠️  Warning: ramen-hub-operator pod not found - it may not be deployed yet"
+            echo "   Configuration changes will be applied when the pod starts"
+          fi
+          
           # Distribute certificate data to managed clusters with retry logic
           echo "8. Distributing certificate data to managed clusters..."
           DISTRIBUTION_ATTEMPTS=3
@@ -582,6 +638,7 @@ spec:
           echo "   - Hub cluster CA bundle: Updated (includes trusted CA + ingress CA)"
           echo "   - Hub cluster proxy: Configured"
           echo "   - ramen-hub-operator-config: Updated with base64-encoded CA bundle"
+          echo "   - ramen-hub-operator pod: Restarted to apply new CA certificates"
           echo "   - Managed clusters: Certificate data distributed (includes ingress CAs)"
           echo ""
           echo "This follows Red Hat ODF Disaster Recovery certificate management guidelines"
