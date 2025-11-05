@@ -56,12 +56,12 @@ spec:
                 local cluster_argocd_instance=""
                 case "$cluster" in
                   "ocp-primary")
-                    cluster_argocd_namespace="ramendr-starter-kit-resilient-1"
-                    cluster_argocd_instance="resilient-1-gitops-server"
+                    cluster_argocd_namespace="ramendr-starter-kit-resilient"
+                    cluster_argocd_instance="resilient-gitops-server"
                     ;;
                   "ocp-secondary")
-                    cluster_argocd_namespace="ramendr-starter-kit-resilient-2"
-                    cluster_argocd_instance="resilient-2-gitops-server"
+                    cluster_argocd_namespace="ramendr-starter-kit-resilient"
+                    cluster_argocd_instance="resilient-gitops-server"
                     ;;
                   "local-cluster")
                     cluster_argocd_namespace="openshift-gitops"
