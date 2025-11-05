@@ -1,6 +1,6 @@
 ---
 clusterGroup:
-  name: resilient-2
+  name: resilient
   isHubCluster: false
 
   namespaces:

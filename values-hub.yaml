@@ -147,24 +147,16 @@ clusterGroup:
       extraValueFiles:
         - '$patternref/overrides/values-odf-chart.yaml'
 
-
   imperative:
     verbosity: "-vvv"
     jobs: []
+
   managedClusterGroups:
-    resilient-1:
-      name: resilient-1
+    resilient:
+      name: resilient
       helmOverrides:
         - name: clusterGroup.isHubCluster
           value: "false"
       acmlabels:
         - name: clusterGroup
-          value: resilient-1
-    resilient-2:
-      name: resilient-2
-      helmOverrides:
-        - name: clusterGroup.isHubCluster
-          value: "false"
-      acmlabels:
-        - name: clusterGroup
-          value: resilient-2
+          value: resilient
