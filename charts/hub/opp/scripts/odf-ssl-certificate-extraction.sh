@@ -519,17 +519,16 @@ with open('$WORK_DIR/existing-ramen-config.yaml', 'w') as f:
     caCertificates: \"$CA_BUNDLE_BASE64\""
   fi
   
-  # Create patch file for ConfigMap update
-  echo "data:" > "$WORK_DIR/ramen-patch.yaml"
-  echo "  ramen_manager_config.yaml: |" >> "$WORK_DIR/ramen-patch.yaml"
-  echo "$UPDATED_YAML" | sed 's/^/    /' >> "$WORK_DIR/ramen-patch.yaml"
+  # Save updated YAML to a file for use with oc set data
+  echo "$UPDATED_YAML" > "$WORK_DIR/ramen_manager_config.yaml"
   
-  # Patch the ConfigMap with updated YAML
-  if oc patch configmap ramen-hub-operator-config -n openshift-operators \
-    --type=merge \
-    --patch-file="$WORK_DIR/ramen-patch.yaml" 2>&1; then
-    
-    # Verify the patch was successful
+  # Update the ConfigMap using oc set data with --from-file (handles multiline content properly)
+  UPDATE_OUTPUT=$(oc set data configmap/ramen-hub-operator-config -n openshift-operators \
+    --from-file=ramen_manager_config.yaml="$WORK_DIR/ramen_manager_config.yaml" 2>&1)
+  UPDATE_EXIT_CODE=$?
+  
+  if [[ $UPDATE_EXIT_CODE -eq 0 ]]; then
+    # Verify the update was successful
     sleep 2
     VERIFIED_YAML=$(oc get configmap ramen-hub-operator-config -n openshift-operators -o jsonpath='{.data.ramen_manager_config\.yaml}' 2>/dev/null || echo "")
     
@@ -537,32 +536,102 @@ with open('$WORK_DIR/existing-ramen-config.yaml', 'w') as f:
       echo "  ✅ ramen-hub-operator-config updated and verified successfully"
       echo "     caCertificates added to all s3StoreProfiles items"
     else
-      echo "  ⚠️  Warning: ramen-hub-operator-config patched but verification failed"
+      echo "  ⚠️  Warning: ramen-hub-operator-config updated but verification failed"
       echo "     The caCertificates field may not have been set correctly in s3StoreProfiles"
       echo "     Current YAML content (first 10 lines):"
       echo "$VERIFIED_YAML" | head -n 10
+      echo "     Update output: $UPDATE_OUTPUT"
     fi
   else
-    echo "  ❌ Error: Could not patch ramen-hub-operator-config"
-    echo "     Attempting alternative approach using oc apply..."
+    echo "  ❌ Error: Could not update ramen-hub-operator-config using oc set data"
+    echo "     Update output: $UPDATE_OUTPUT"
+    echo "     Attempting alternative approach using oc patch with JSON..."
     
-    # Alternative: Use oc apply with the patch file
-    if oc apply -f "$WORK_DIR/ramen-patch.yaml" 2>&1; then
-      sleep 2
-      VERIFIED_YAML=$(oc get configmap ramen-hub-operator-config -n openshift-operators -o jsonpath='{.data.ramen_manager_config\.yaml}' 2>/dev/null || echo "")
+    # Alternative: Use oc patch with JSON format
+    # Get the ConfigMap, update it, and create a JSON patch
+    oc get configmap ramen-hub-operator-config -n openshift-operators -o json > "$WORK_DIR/ramen-configmap.json" 2>/dev/null
+    if [[ -f "$WORK_DIR/ramen-configmap.json" ]]; then
+      # Update the data section using jq if available, or python
+      if command -v jq &>/dev/null; then
+        # Escape the YAML content for JSON
+        ESCAPED_YAML=$(echo "$UPDATED_YAML" | jq -Rs .)
+        jq ".data.\"ramen_manager_config.yaml\" = $ESCAPED_YAML" "$WORK_DIR/ramen-configmap.json" > "$WORK_DIR/ramen-configmap-updated.json"
+      elif command -v python3 &>/dev/null; then
+        python3 -c "
+import json
+import sys
+
+with open('$WORK_DIR/ramen-configmap.json', 'r') as f:
+    cm = json.load(f)
+
+if 'data' not in cm:
+    cm['data'] = {}
+
+cm['data']['ramen_manager_config.yaml'] = '''$UPDATED_YAML'''
+
+with open('$WORK_DIR/ramen-configmap-updated.json', 'w') as f:
+    json.dump(cm, f, indent=2)
+" 2>/dev/null
+      fi
       
-      if echo "$VERIFIED_YAML" | grep -q "s3StoreProfiles" && echo "$VERIFIED_YAML" | grep -q "caCertificates" && echo "$VERIFIED_YAML" | grep -q "$CA_BUNDLE_BASE64"; then
-        echo "  ✅ ramen-hub-operator-config updated using alternative approach"
+      if [[ -f "$WORK_DIR/ramen-configmap-updated.json" ]]; then
+        # Extract just the data section for the patch
+        if command -v jq &>/dev/null; then
+          jq '{data: .data}' "$WORK_DIR/ramen-configmap-updated.json" > "$WORK_DIR/ramen-patch.json"
+        elif command -v python3 &>/dev/null; then
+          python3 -c "
+import json
+
+with open('$WORK_DIR/ramen-configmap-updated.json', 'r') as f:
+    cm = json.load(f)
+
+patch = {'data': cm.get('data', {})}
+
+with open('$WORK_DIR/ramen-patch.json', 'w') as f:
+    json.dump(patch, f, indent=2)
+" 2>/dev/null
+        fi
+        
+        if [[ -f "$WORK_DIR/ramen-patch.json" ]]; then
+          PATCH_OUTPUT=$(oc patch configmap ramen-hub-operator-config -n openshift-operators \
+            --type=merge \
+            --patch-file="$WORK_DIR/ramen-patch.json" 2>&1)
+          PATCH_EXIT_CODE=$?
+          
+          if [[ $PATCH_EXIT_CODE -eq 0 ]]; then
+            sleep 2
+            VERIFIED_YAML=$(oc get configmap ramen-hub-operator-config -n openshift-operators -o jsonpath='{.data.ramen_manager_config\.yaml}' 2>/dev/null || echo "")
+            
+            if echo "$VERIFIED_YAML" | grep -q "s3StoreProfiles" && echo "$VERIFIED_YAML" | grep -q "caCertificates" && echo "$VERIFIED_YAML" | grep -q "$CA_BUNDLE_BASE64"; then
+              echo "  ✅ ramen-hub-operator-config updated using oc patch approach"
+            else
+              echo "  ⚠️  Warning: oc patch applied but verification failed"
+              echo "     Current YAML content (first 10 lines):"
+              echo "$VERIFIED_YAML" | head -n 10
+              echo "     Patch output: $PATCH_OUTPUT"
+            fi
+          else
+            echo "  ❌ oc patch approach also failed"
+            echo "     Patch output: $PATCH_OUTPUT"
+            echo "     Manual intervention may be required to set caCertificates in s3StoreProfiles"
+          fi
+        else
+          echo "  ❌ Could not create JSON patch file"
+          echo "     Manual intervention may be required to set caCertificates in s3StoreProfiles"
+        fi
+        rm -f "$WORK_DIR/ramen-configmap.json" "$WORK_DIR/ramen-configmap-updated.json" "$WORK_DIR/ramen-patch.json"
       else
-        echo "  ⚠️  Warning: Alternative approach applied but verification failed"
+        echo "  ❌ Could not update ConfigMap JSON"
+        echo "     Manual intervention may be required to set caCertificates in s3StoreProfiles"
+        rm -f "$WORK_DIR/ramen-configmap.json"
       fi
     else
-      echo "  ❌ Alternative approach also failed"
+      echo "  ❌ Could not retrieve ConfigMap for alternative approach"
       echo "     Manual intervention may be required to set caCertificates in s3StoreProfiles"
     fi
   fi
   
-  rm -f "$WORK_DIR/existing-ramen-config.yaml" "$WORK_DIR/ramen-patch.yaml"
+  rm -f "$WORK_DIR/existing-ramen-config.yaml" "$WORK_DIR/ramen_manager_config.yaml"
   
 else
   echo "  ConfigMap does not exist, creating with ramen_manager_config.yaml containing s3StoreProfiles with caCertificates..."
