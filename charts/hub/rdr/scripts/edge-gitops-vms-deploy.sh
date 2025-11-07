@@ -299,17 +299,14 @@ if [[ -s "$WORK_DIR/helm-output.yaml" ]]; then
     }
   ' "$WORK_DIR/helm-output.yaml" > "$WORK_DIR/resources-list.txt"
   
-  # Check each resource in the gitops-vms namespace
+  # Check each resource in the gitops-vms namespace (all resources should be in gitops-vms)
   while IFS='|' read -r kind name namespace; do
     if [[ -z "$kind" || -z "$name" ]]; then
       continue
     fi
     
-    # Use gitops-vms namespace if namespace is not specified or is empty
-    check_namespace="${namespace:-$VM_NAMESPACE}"
-    if [[ "$check_namespace" == "null" ]]; then
-      check_namespace="$VM_NAMESPACE"
-    fi
+    # All resources (VMs, Services, Routes) should be in gitops-vms namespace
+    check_namespace="$VM_NAMESPACE"
     
     echo "  Checking $kind/$name in namespace: $check_namespace"
     
@@ -356,12 +353,14 @@ else
   # Render the template and ensure all resources have the correct namespace
   helm template edge-gitops-vms "$HELM_CHART_URL" $VALUES_ARG --set namespace="$VM_NAMESPACE" > "$WORK_DIR/helm-template-to-apply.yaml" 2>&1
   
-  # Ensure all resources have the namespace set (patch if missing)
+  # Ensure all resources (VMs, Services, Routes) have the gitops-vms namespace set
   if command -v yq &>/dev/null; then
-    # Use yq to ensure namespace is set on all resources
-    yq eval 'select(.metadata.namespace == null or .metadata.namespace == "") | .metadata.namespace = "'"$VM_NAMESPACE"'"' -i "$WORK_DIR/helm-template-to-apply.yaml" 2>/dev/null || true
+    # Use yq to ensure namespace is set to gitops-vms on all resources
+    yq eval 'select(.kind == "VirtualMachine" or .kind == "Service" or .kind == "Route") | .metadata.namespace = "'"$VM_NAMESPACE"'"' -i "$WORK_DIR/helm-template-to-apply.yaml" 2>/dev/null || true
   else
-    # Fallback: use sed to add namespace if missing (basic approach)
+    # Fallback: use sed to add/update namespace for all resources
+    # Add namespace after metadata if missing, or update existing namespace
+    sed -i "/^kind: \(VirtualMachine\|Service\|Route\)$/,/^---$/ { /^  namespace:/! { /^metadata:/a\  namespace: $VM_NAMESPACE"'; } }' "$WORK_DIR/helm-template-to-apply.yaml" 2>/dev/null || true
     sed -i "s/^  namespace:.*$/  namespace: $VM_NAMESPACE/g" "$WORK_DIR/helm-template-to-apply.yaml" 2>/dev/null || true
   fi
   
@@ -376,11 +375,8 @@ else
     if [[ -s "$WORK_DIR/resources-list.txt" ]]; then
       while IFS='|' read -r kind name namespace; do
         if [[ -n "$kind" && -n "$name" ]]; then
-          # Use gitops-vms namespace if namespace is not specified or is empty
-          check_namespace="${namespace:-$VM_NAMESPACE}"
-          if [[ "$check_namespace" == "null" ]]; then
-            check_namespace="$VM_NAMESPACE"
-          fi
+          # All resources (VMs, Services, Routes) should be in gitops-vms namespace
+          check_namespace="$VM_NAMESPACE"
           
           sleep 1  # Give resources a moment to be created
           if check_resource_exists "" "$kind" "$check_namespace" "$name"; then
