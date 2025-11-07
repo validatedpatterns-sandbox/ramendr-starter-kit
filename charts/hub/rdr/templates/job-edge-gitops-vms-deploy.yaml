@@ -33,6 +33,11 @@ spec:
         - /bin/bash
         - -c
         - |
+          # Write values file from Helm template
+          cat > /tmp/edge-gitops-vms/values-egv-dr.yaml << 'VALUES_EOF'
+{{ .Files.Get "files/values-egv-dr.yaml" | indent 10 }}
+VALUES_EOF
+          
 {{ .Files.Get "scripts/edge-gitops-vms-deploy.sh" | indent 10 }}
         env:
         - name: KUBECONFIG

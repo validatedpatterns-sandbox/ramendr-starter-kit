@@ -6,14 +6,18 @@ echo "This job will check for existing VMs, Services, and Routes before applying
 
 # Configuration
 HELM_CHART_URL="https://github.com/validatedpatterns/helm-charts/releases/download/main/edge-gitops-vms-0.2.10.tgz"
-VALUES_FILE="overrides/values-egv-dr.yaml"
 WORK_DIR="/tmp/edge-gitops-vms"
+VALUES_FILE="$WORK_DIR/values-egv-dr.yaml"
 DRPC_NAMESPACE="openshift-dr-ops"
 DRPC_NAME="gitops-vm-protection"
 PLACEMENT_NAME="gitops-vm-protection-placement-1"
 
 # Create working directory
 mkdir -p "$WORK_DIR"
+
+# Values file is created by Helm template using .Files.Get
+# It should already exist at $VALUES_FILE from the job template
+# We'll check for it later when we need to use it
 
 # Function to check if resource exists
 check_resource_exists() {
@@ -133,13 +137,16 @@ fi
 echo ""
 echo "Step 2: Rendering helm template..."
 echo "  Chart URL: $HELM_CHART_URL"
-echo "  Values file: $VALUES_FILE"
+echo "  Values file: $VALUES_FILE (from Helm template)"
 
-if [[ ! -f "$VALUES_FILE" ]]; then
+# Values file is created by Helm template using .Files.Get
+# Check if it exists and set VALUES_ARG accordingly
+if [[ -f "$VALUES_FILE" ]]; then
+  VALUES_ARG="-f $VALUES_FILE"
+  echo "  ✅ Using values file from Helm template: $VALUES_FILE"
+else
   echo "  ⚠️  Warning: Values file $VALUES_FILE not found, using default values"
   VALUES_ARG=""
-else
-  VALUES_ARG="-f $VALUES_FILE"
 fi
 
 # Render helm template
