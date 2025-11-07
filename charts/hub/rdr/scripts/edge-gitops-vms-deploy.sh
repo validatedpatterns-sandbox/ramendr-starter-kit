@@ -1,6 +1,27 @@
 #!/bin/bash
 set -euo pipefail
 
+# Function to display error diagnostics if oc apply fails
+display_apply_error() {
+  if [[ -n "${APPLY_EXIT_CODE:-}" && $APPLY_EXIT_CODE -ne 0 ]]; then
+    echo ""
+    echo "  ========================================"
+    echo "  ERROR: oc apply failed"
+    echo "  ========================================"
+    echo "  Exit code: $APPLY_EXIT_CODE"
+    if [[ -f "${APPLY_STDOUT_FILE:-}" ]]; then
+      echo "  stdout file: ${APPLY_STDOUT_FILE}"
+      echo "  stdout content:"
+      cat "${APPLY_STDOUT_FILE}" 2>/dev/null | head -50 | sed 's/^/    /' || echo "    (could not read)"
+    fi
+    if [[ -f "${APPLY_STDERR_FILE:-}" ]]; then
+      echo "  stderr file: ${APPLY_STDERR_FILE}"
+      echo "  stderr content:"
+      cat "${APPLY_STDERR_FILE}" 2>/dev/null | head -50 | sed 's/^/    /' || echo "    (could not read)"
+    fi
+  fi
+}
+
 echo "Starting Edge GitOps VMs deployment check and deployment..."
 echo "This job will check for existing VMs, Services, Routes, and ExternalSecrets before applying the helm template"
 
@@ -442,13 +463,80 @@ else
   
   echo "  Executing: oc apply -n $VM_NAMESPACE -f $TEMPLATE_OUTPUT_FILE"
   
+  # Temporarily disable exit on error to ensure we capture output even if oc apply fails
+  set +e
+  
   # Capture stdout and stderr separately, then capture exit code
+  echo "  Running oc apply command..."
+  echo "  Command: oc apply -n $VM_NAMESPACE -f $TEMPLATE_OUTPUT_FILE"
+  
+  # Run oc apply and capture output
   oc apply -n "$VM_NAMESPACE" -f "$TEMPLATE_OUTPUT_FILE" >"$APPLY_STDOUT_FILE" 2>"$APPLY_STDERR_FILE"
   APPLY_EXIT_CODE=$?
   
-  # Read stdout and stderr from files
-  APPLY_STDOUT=$(cat "$APPLY_STDOUT_FILE" 2>/dev/null || echo "")
-  APPLY_STDERR=$(cat "$APPLY_STDERR_FILE" 2>/dev/null || echo "")
+  # Immediately flush output to ensure it's written
+  sync 2>/dev/null || true
+  
+  # Re-enable exit on error (but we'll handle the exit ourselves)
+  set -e
+  
+  # Immediately verify files were created and show sizes
+  echo "  Command completed with exit code: $APPLY_EXIT_CODE"
+  
+  # Force output flush
+  echo "" >&2
+  
+  if [[ -f "$APPLY_STDOUT_FILE" ]]; then
+    STDOUT_SIZE=$(wc -c < "$APPLY_STDOUT_FILE" 2>/dev/null || echo "0")
+    echo "  stdout file exists: yes (size: $STDOUT_SIZE bytes)"
+  else
+    echo "  stdout file exists: no"
+    STDOUT_SIZE=0
+  fi
+  
+  if [[ -f "$APPLY_STDERR_FILE" ]]; then
+    STDERR_SIZE=$(wc -c < "$APPLY_STDERR_FILE" 2>/dev/null || echo "0")
+    echo "  stderr file exists: yes (size: $STDERR_SIZE bytes)"
+  else
+    echo "  stderr file exists: no"
+    STDERR_SIZE=0
+  fi
+  
+  # If command failed, immediately show error output
+  if [[ $APPLY_EXIT_CODE -ne 0 ]]; then
+    echo ""
+    echo "  ⚠️  oc apply failed with exit code $APPLY_EXIT_CODE"
+    echo "  Displaying error output immediately..."
+    echo ""
+    
+    if [[ -f "$APPLY_STDERR_FILE" && $STDERR_SIZE -gt 0 ]]; then
+      echo "  STDERR OUTPUT:"
+      echo "  ----------------------------------------"
+      cat "$APPLY_STDERR_FILE" | sed 's/^/  /'
+      echo "  ----------------------------------------"
+      echo ""
+    fi
+    
+    if [[ -f "$APPLY_STDOUT_FILE" && $STDOUT_SIZE -gt 0 ]]; then
+      echo "  STDOUT OUTPUT:"
+      echo "  ----------------------------------------"
+      cat "$APPLY_STDOUT_FILE" | sed 's/^/  /'
+      echo "  ----------------------------------------"
+      echo ""
+    fi
+  fi
+  
+  # Read stdout and stderr from files (always read, even if command failed)
+  APPLY_STDOUT=""
+  APPLY_STDERR=""
+  
+  if [[ -f "$APPLY_STDOUT_FILE" ]]; then
+    APPLY_STDOUT=$(cat "$APPLY_STDOUT_FILE" 2>/dev/null || echo "")
+  fi
+  
+  if [[ -f "$APPLY_STDERR_FILE" ]]; then
+    APPLY_STDERR=$(cat "$APPLY_STDERR_FILE" 2>/dev/null || echo "")
+  fi
   
   # Combine stdout and stderr for full output
   APPLY_OUTPUT=""
@@ -513,32 +601,47 @@ ${APPLY_STDERR}"
       exit 0
     fi
   else
-    echo "  ❌ Error: Failed to apply helm template"
+    # Error occurred - display all diagnostic information
+    echo ""
+    echo "  ❌❌❌ ERROR: Failed to apply helm template ❌❌❌"
     echo ""
     echo "  ========================================"
     echo "  ERROR DETAILS"
     echo "  ========================================"
     echo "  Exit code: $APPLY_EXIT_CODE"
     echo ""
-    if [[ -n "$APPLY_OUTPUT" ]]; then
-      echo "  Full output (stdout + stderr):"
-      echo "  ----------------------------------------"
-      echo "$APPLY_OUTPUT" | sed 's/^/  /'
-      echo "  ----------------------------------------"
-    fi
+    
+    # Always show stdout if it exists
     if [[ -n "$APPLY_STDOUT" ]]; then
-      echo ""
-      echo "  Standard output:"
-      echo "  ----------------------------------------"
+      echo "  ========================================"
+      echo "  STANDARD OUTPUT (stdout)"
+      echo "  ========================================"
       echo "$APPLY_STDOUT" | sed 's/^/  /'
-      echo "  ----------------------------------------"
-    fi
-    if [[ -n "$APPLY_STDERR" ]]; then
       echo ""
-      echo "  Standard error output:"
-      echo "  ----------------------------------------"
+    else
+      echo "  Standard output: (empty)"
+      echo ""
+    fi
+    
+    # Always show stderr if it exists
+    if [[ -n "$APPLY_STDERR" ]]; then
+      echo "  ========================================"
+      echo "  STANDARD ERROR OUTPUT (stderr)"
+      echo "  ========================================"
       echo "$APPLY_STDERR" | sed 's/^/  /'
-      echo "  ----------------------------------------"
+      echo ""
+    else
+      echo "  Standard error output: (empty)"
+      echo ""
+    fi
+    
+    # Show combined output
+    if [[ -n "$APPLY_OUTPUT" ]]; then
+      echo "  ========================================"
+      echo "  COMBINED OUTPUT (stdout + stderr)"
+      echo "  ========================================"
+      echo "$APPLY_OUTPUT" | sed 's/^/  /'
+      echo ""
     fi
     echo ""
     echo "  ========================================"
