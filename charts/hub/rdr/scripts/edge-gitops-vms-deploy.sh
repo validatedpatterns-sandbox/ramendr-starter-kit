@@ -8,7 +8,9 @@ echo "This job will check for existing VMs, Services, and Routes before applying
 HELM_CHART_URL="https://github.com/validatedpatterns/helm-charts/releases/download/main/edge-gitops-vms-0.2.10.tgz"
 VALUES_FILE="overrides/values-egv-dr.yaml"
 WORK_DIR="/tmp/edge-gitops-vms"
-PRIMARY_CLUSTER="ocp-primary"
+DRPC_NAMESPACE="openshift-dr-ops"
+DRPC_NAME="gitops-vm-protection"
+PLACEMENT_NAME="gitops-vm-protection-placement-1"
 
 # Create working directory
 mkdir -p "$WORK_DIR"
@@ -34,43 +36,82 @@ check_resource_exists() {
   return 1
 }
 
-# Function to get kubeconfig for primary managed cluster
-get_primary_cluster_kubeconfig() {
-  echo "Getting kubeconfig for primary managed cluster: $PRIMARY_CLUSTER"
+# Function to get target cluster from Placement resource
+get_target_cluster_from_placement() {
+  echo "Getting target cluster from Placement resource: $PLACEMENT_NAME"
+  
+  # Get the PlacementDecision for the Placement resource
+  PLACEMENT_DECISION=$(oc get placementdecision -n "$DRPC_NAMESPACE" \
+    -l cluster.open-cluster-management.io/placement="$PLACEMENT_NAME" \
+    -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+  
+  if [[ -z "$PLACEMENT_DECISION" ]]; then
+    echo "  ⚠️  Warning: Could not find PlacementDecision for $PLACEMENT_NAME"
+    echo "  Will default to primary cluster (ocp-primary)"
+    TARGET_CLUSTER="ocp-primary"
+    return 1
+  fi
+  
+  # Get the cluster name from PlacementDecision
+  TARGET_CLUSTER=$(oc get placementdecision "$PLACEMENT_DECISION" -n "$DRPC_NAMESPACE" \
+    -o jsonpath='{.status.decisions[0].clusterName}' 2>/dev/null || echo "")
+  
+  if [[ -z "$TARGET_CLUSTER" ]]; then
+    echo "  ⚠️  Warning: Could not determine target cluster from PlacementDecision"
+    echo "  Will default to primary cluster (ocp-primary)"
+    TARGET_CLUSTER="ocp-primary"
+    return 1
+  fi
+  
+  echo "  ✅ Target cluster determined from Placement: $TARGET_CLUSTER"
+  return 0
+}
+
+# Function to get kubeconfig for target managed cluster
+get_target_cluster_kubeconfig() {
+  local cluster="$1"
+  echo "Getting kubeconfig for target managed cluster: $cluster"
   
   # Try to get kubeconfig from secret
-  if oc get secret -n "$PRIMARY_CLUSTER" -o name | grep -E "(admin-kubeconfig|kubeconfig)" | head -1 | \
-     xargs -I {} oc get {} -n "$PRIMARY_CLUSTER" -o jsonpath='{.data.kubeconfig}' | \
-     base64 -d > "$WORK_DIR/primary-kubeconfig.yaml" 2>/dev/null; then
-    echo "  ✅ Retrieved kubeconfig for $PRIMARY_CLUSTER"
-    export KUBECONFIG="$WORK_DIR/primary-kubeconfig.yaml"
+  if oc get secret -n "$cluster" -o name | grep -E "(admin-kubeconfig|kubeconfig)" | head -1 | \
+     xargs -I {} oc get {} -n "$cluster" -o jsonpath='{.data.kubeconfig}' | \
+     base64 -d > "$WORK_DIR/target-kubeconfig.yaml" 2>/dev/null; then
+    echo "  ✅ Retrieved kubeconfig for $cluster"
+    export KUBECONFIG="$WORK_DIR/target-kubeconfig.yaml"
     
-    # Verify we can connect to the primary cluster
+    # Verify we can connect to the target cluster
     if oc get nodes &>/dev/null; then
-      echo "  ✅ Successfully connected to primary managed cluster"
-      PRIMARY_CLUSTER_NAME=$(oc get managedcluster "$PRIMARY_CLUSTER" -o jsonpath='{.metadata.name}' 2>/dev/null || echo "$PRIMARY_CLUSTER")
-      echo "  Primary cluster name: $PRIMARY_CLUSTER_NAME"
+      echo "  ✅ Successfully connected to target managed cluster: $cluster"
       return 0
     else
-      echo "  ⚠️  Warning: Could not verify connection to primary cluster"
+      echo "  ⚠️  Warning: Could not verify connection to target cluster"
       return 1
     fi
   else
-    echo "  ⚠️  Could not get kubeconfig for $PRIMARY_CLUSTER"
-    echo "  Will use current context (assuming we're already on the primary cluster)"
+    echo "  ⚠️  Could not get kubeconfig for $cluster"
+    echo "  Will use current context (assuming we're already on the target cluster)"
     return 1
   fi
 }
 
-# Get kubeconfig for primary cluster
-if ! get_primary_cluster_kubeconfig; then
-  echo "  ⚠️  Warning: Could not get kubeconfig for primary cluster"
+# Get target cluster from Placement resource
+TARGET_CLUSTER="ocp-primary"  # Default to primary
+if get_target_cluster_from_placement; then
+  echo "  Target cluster: $TARGET_CLUSTER"
+else
+  echo "  Using default target cluster: $TARGET_CLUSTER"
+fi
+
+# Get kubeconfig for target cluster
+if ! get_target_cluster_kubeconfig "$TARGET_CLUSTER"; then
+  echo "  ⚠️  Warning: Could not get kubeconfig for target cluster"
   echo "  Continuing with current context..."
 fi
 
 # Check if we're on the right cluster
 CURRENT_CLUSTER=$(oc config view --minify -o jsonpath='{.contexts[0].context.cluster}' 2>/dev/null || echo "")
 echo "Current cluster context: $CURRENT_CLUSTER"
+echo "Target cluster for deployment: $TARGET_CLUSTER"
 
 # Step 1: Check for helm and install if needed
 echo ""
