@@ -71,131 +71,136 @@ check_drpc_status() {
   return 0  # Continue with other checks even if status is ambiguous
 }
 
-# Function to check PVCs in protected namespace
+# Function to check PVC replication health from DRPC status
 check_pvcs_health() {
-  echo "Checking PVCs in protected namespace $PROTECTED_NAMESPACE..."
+  echo "Checking PVC replication health from DRPC status..."
   
-  # Check if namespace exists
-  if ! oc get namespace "$PROTECTED_NAMESPACE" &>/dev/null; then
-    echo "⚠️  Protected namespace $PROTECTED_NAMESPACE does not exist yet"
-    return 1
-  fi
+  # Check phase for overall health
+  local phase=$(oc get drplacementcontrol "$DRPC_NAME" -n "$DRPC_NAMESPACE" -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
   
-  # Get all PVCs in the protected namespace that match the DRPC selector
-  # DRPC pvcSelector: app.kubernetes.io/component=storage
-  local pvc_count=$(oc get pvc -n "$PROTECTED_NAMESPACE" -l app.kubernetes.io/component=storage --no-headers 2>/dev/null | wc -l | tr -d ' \n' || echo "0")
+  echo "  DRPC Phase: $phase"
   
-  if [[ $pvc_count -eq 0 ]]; then
-    echo "⚠️  No PVCs found in namespace $PROTECTED_NAMESPACE with label app.kubernetes.io/component=storage"
-    echo "  This may be expected if no storage components are deployed yet"
-    # Don't fail if no PVCs exist - they may be created later
+  # If phase is Deployed, assume PVCs are healthy
+  if [[ "$phase" == "Deployed" ]]; then
+    echo "✅ DRPC is in Deployed phase - PVC replication appears healthy"
     return 0
   fi
   
-  echo "  Found $pvc_count PVC(s) with storage component label"
+  # Get all conditions and check for PVC/Volume/Storage related ones
+  local all_conditions=$(oc get drplacementcontrol "$DRPC_NAME" -n "$DRPC_NAMESPACE" -o jsonpath='{range .status.conditions[*]}{.type}={.status}{"\n"}{end}' 2>/dev/null || echo "")
   
-  # Check each PVC status
-  local all_pvcs_healthy=true
-  local pvc_list=$(oc get pvc -n "$PROTECTED_NAMESPACE" -l app.kubernetes.io/component=storage -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
-  
-  if [[ -z "$pvc_list" ]]; then
-    echo "⚠️  Could not retrieve PVC list"
+  if [[ -z "$all_conditions" ]]; then
+    echo "⚠️  No conditions found in DRPC status"
     return 1
   fi
   
-  for pvc_name in $pvc_list; do
-    local pvc_phase=$(oc get pvc "$pvc_name" -n "$PROTECTED_NAMESPACE" -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
-    local pvc_size=$(oc get pvc "$pvc_name" -n "$PROTECTED_NAMESPACE" -o jsonpath='{.status.capacity.storage}' 2>/dev/null || echo "Unknown")
-    
-    echo "  PVC $pvc_name: Phase=$pvc_phase, Size=$pvc_size"
-    
-    if [[ "$pvc_phase" != "Bound" ]]; then
-      echo "    ❌ PVC $pvc_name is not Bound (current phase: $pvc_phase)"
-      all_pvcs_healthy=false
-    else
-      echo "    ✅ PVC $pvc_name is Bound and healthy"
+  # Check for PVC-related conditions
+  local pvc_healthy=false
+  while IFS='=' read -r type status; do
+    if [[ -n "$type" && -n "$status" ]]; then
+      # Check if this condition is related to PVCs/Volumes/Storage
+      if [[ "$type" == *"PVC"* ]] || [[ "$type" == *"Volume"* ]] || [[ "$type" == *"Storage"* ]]; then
+        echo "  PVC-related condition: $type=$status"
+        if [[ "$status" == "True" ]] || [[ "$status" == "Healthy" ]] || [[ "$status" == "Replicating" ]]; then
+          echo "    ✅ PVC replication is healthy"
+          pvc_healthy=true
+        elif [[ "$status" == "False" ]] || [[ "$status" == "Unhealthy" ]] || [[ "$status" == "Failed" ]]; then
+          echo "    ❌ PVC replication is not healthy"
+          return 1
+        fi
+      fi
     fi
-  done
+  done <<< "$all_conditions"
   
-  if [[ "$all_pvcs_healthy" == "true" ]]; then
-    echo "✅ All PVCs in protected namespace are healthy"
+  # Check for overall replication conditions
+  while IFS='=' read -r type status; do
+    if [[ -n "$type" && -n "$status" ]]; then
+      if [[ "$type" == *"Replication"* ]] || [[ "$type" == *"Replicating"* ]]; then
+        echo "  Replication condition: $type=$status"
+        if [[ "$status" == "True" ]] || [[ "$status" == "Healthy" ]]; then
+          echo "    ✅ Replication is healthy"
+          pvc_healthy=true
+        fi
+      fi
+    fi
+  done <<< "$all_conditions"
+  
+  # Check for error conditions
+  while IFS='=' read -r type status; do
+    if [[ -n "$type" && -n "$status" ]]; then
+      if [[ "$status" == "False" ]] && ([[ "$type" == *"PVC"* ]] || [[ "$type" == *"Volume"* ]] || [[ "$type" == *"Storage"* ]]); then
+        echo "❌ Found error condition: $type=$status"
+        return 1
+      fi
+    fi
+  done <<< "$all_conditions"
+  
+  if [[ "$pvc_healthy" == "true" ]] || [[ "$phase" == "Deployed" ]]; then
+    echo "✅ PVC replication appears healthy based on DRPC status"
     return 0
   else
-    echo "❌ Some PVCs are not healthy"
+    echo "⚠️  Could not determine PVC replication health from DRPC status"
     return 1
   fi
 }
 
-# Function to check Kubernetes objects in protected namespace
+# Function to check Kubernetes object replication health from DRPC status
 check_k8s_objects_health() {
-  echo "Checking Kubernetes objects in protected namespace $PROTECTED_NAMESPACE..."
+  echo "Checking Kubernetes object replication health from DRPC status..."
   
-  # Check if namespace exists
-  if ! oc get namespace "$PROTECTED_NAMESPACE" &>/dev/null; then
-    echo "⚠️  Protected namespace $PROTECTED_NAMESPACE does not exist yet"
+  # Check phase for overall health
+  local phase=$(oc get drplacementcontrol "$DRPC_NAME" -n "$DRPC_NAMESPACE" -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
+  
+  echo "  DRPC Phase: $phase"
+  
+  # If phase is Deployed, assume Kubernetes objects are healthy
+  if [[ "$phase" == "Deployed" ]]; then
+    echo "✅ DRPC is in Deployed phase - Kubernetes object replication appears healthy"
+    return 0
+  fi
+  
+  # Get all conditions and check for KubeObject/Object/Replication related ones
+  local all_conditions=$(oc get drplacementcontrol "$DRPC_NAME" -n "$DRPC_NAMESPACE" -o jsonpath='{range .status.conditions[*]}{.type}={.status}{"\n"}{end}' 2>/dev/null || echo "")
+  
+  if [[ -z "$all_conditions" ]]; then
+    echo "⚠️  No conditions found in DRPC status"
     return 1
   fi
   
-  local all_objects_healthy=true
-  
-  # Check Deployments
-  echo "  Checking Deployments..."
-  local deployments=$(oc get deployments -n "$PROTECTED_NAMESPACE" --no-headers 2>/dev/null | wc -l | tr -d ' \n' || echo "0")
-  if [[ $deployments -gt 0 ]]; then
-    local ready_deployments=$(oc get deployments -n "$PROTECTED_NAMESPACE" -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.readyReplicas}{"/"}{.status.replicas}{"\n"}{end}' 2>/dev/null || echo "")
-    while IFS=$'\t' read -r name replicas; do
-      if [[ -n "$name" && -n "$replicas" ]]; then
-        echo "    Deployment $name: $replicas"
-        if [[ "$replicas" =~ ^0/ ]] || [[ "$replicas" =~ /0$ ]]; then
-          echo "      ❌ Deployment $name is not ready"
-          all_objects_healthy=false
+  # Check for Kubernetes object-related conditions
+  local kubeobject_healthy=false
+  while IFS='=' read -r type status; do
+    if [[ -n "$type" && -n "$status" ]]; then
+      # Check if this condition is related to KubeObjects/Objects/Replication
+      if [[ "$type" == *"KubeObject"* ]] || [[ "$type" == *"Object"* ]] || [[ "$type" == *"Replication"* ]] || [[ "$type" == *"Replicating"* ]] || [[ "$type" == *"Available"* ]]; then
+        echo "  Kubernetes object replication condition: $type=$status"
+        if [[ "$status" == "True" ]] || [[ "$status" == "Healthy" ]] || [[ "$status" == "Replicating" ]]; then
+          echo "    ✅ Kubernetes object replication is healthy"
+          kubeobject_healthy=true
+        elif [[ "$status" == "False" ]] || [[ "$status" == "Unhealthy" ]] || [[ "$status" == "Failed" ]]; then
+          echo "    ❌ Kubernetes object replication is not healthy"
+          return 1
         fi
       fi
-    done <<< "$ready_deployments"
-  else
-    echo "    No Deployments found (this may be expected)"
-  fi
-  
-  # Check StatefulSets
-  echo "  Checking StatefulSets..."
-  local statefulsets=$(oc get statefulsets -n "$PROTECTED_NAMESPACE" --no-headers 2>/dev/null | wc -l | tr -d ' \n' || echo "0")
-  if [[ $statefulsets -gt 0 ]]; then
-    local ready_statefulsets=$(oc get statefulsets -n "$PROTECTED_NAMESPACE" -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.readyReplicas}{"/"}{.status.replicas}{"\n"}{end}' 2>/dev/null || echo "")
-    while IFS=$'\t' read -r name replicas; do
-      if [[ -n "$name" && -n "$replicas" ]]; then
-        echo "    StatefulSet $name: $replicas"
-        if [[ "$replicas" =~ ^0/ ]] || [[ "$replicas" =~ /0$ ]]; then
-          echo "      ❌ StatefulSet $name is not ready"
-          all_objects_healthy=false
-        fi
-      fi
-    done <<< "$ready_statefulsets"
-  else
-    echo "    No StatefulSets found (this may be expected)"
-  fi
-  
-  # Check Pods
-  echo "  Checking Pods..."
-  local pod_count=$(oc get pods -n "$PROTECTED_NAMESPACE" --no-headers 2>/dev/null | wc -l | tr -d ' \n' || echo "0")
-  if [[ $pod_count -gt 0 ]]; then
-    local failed_pods=$(oc get pods -n "$PROTECTED_NAMESPACE" -o jsonpath='{range .items[?(@.status.phase!="Running" && @.status.phase!="Succeeded")]}{.metadata.name}{"\t"}{.status.phase}{"\n"}{end}' 2>/dev/null || echo "")
-    if [[ -n "$failed_pods" ]]; then
-      echo "    ⚠️  Some pods are not in Running/Succeeded state:"
-      echo "$failed_pods" | sed 's/^/      /'
-      # Don't fail on pod status - they may be starting up
-    else
-      echo "    ✅ All pods are in Running or Succeeded state"
     fi
-  else
-    echo "    No Pods found (this may be expected)"
-  fi
+  done <<< "$all_conditions"
   
-  if [[ "$all_objects_healthy" == "true" ]]; then
-    echo "✅ Kubernetes objects in protected namespace appear healthy"
+  # Check for error conditions
+  while IFS='=' read -r type status; do
+    if [[ -n "$type" && -n "$status" ]]; then
+      if [[ "$status" == "False" ]] && ([[ "$type" == *"KubeObject"* ]] || [[ "$type" == *"Object"* ]] || [[ "$type" == *"Replication"* ]]); then
+        echo "❌ Found error condition: $type=$status"
+        return 1
+      fi
+    fi
+  done <<< "$all_conditions"
+  
+  if [[ "$kubeobject_healthy" == "true" ]] || [[ "$phase" == "Deployed" ]]; then
+    echo "✅ Kubernetes object replication appears healthy based on DRPC status"
     return 0
   else
-    echo "⚠️  Some Kubernetes objects may not be fully healthy, but continuing..."
-    return 0  # Don't fail on this - allow the check to continue
+    echo "⚠️  Could not determine Kubernetes object replication health from DRPC status"
+    return 1
   fi
 }
 
@@ -329,8 +334,8 @@ echo "❌ DRPC health check failed after $MAX_ATTEMPTS attempts"
 echo "Please ensure:"
 echo "1. DRPC $DRPC_NAME exists in namespace $DRPC_NAMESPACE"
 echo "2. DRPC is in a healthy state (Deployed phase or Available/Ready conditions)"
-echo "3. PVCs in namespace $PROTECTED_NAMESPACE are Bound"
-echo "4. Kubernetes objects in namespace $PROTECTED_NAMESPACE are healthy"
+echo "3. PVC replication is healthy (check DRPC status for PVC replication conditions)"
+echo "4. Kubernetes object replication is healthy (check DRPC status for KubeObject replication conditions)"
 echo ""
 echo "Current DRPC status:"
 oc get drplacementcontrol "$DRPC_NAME" -n "$DRPC_NAMESPACE" -o yaml 2>/dev/null || echo "  DRPC not found or not accessible"
