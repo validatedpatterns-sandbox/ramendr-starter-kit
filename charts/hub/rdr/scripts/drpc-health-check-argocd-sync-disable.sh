@@ -8,7 +8,8 @@ echo "This job will check DRPC health (Kubernetes objects and PVCs) and disable 
 DRPC_NAMESPACE="${DRPC_NAMESPACE:-openshift-dr-ops}"
 DRPC_NAME="${DRPC_NAME:-gitops-vm-protection}"
 PROTECTED_NAMESPACE="${PROTECTED_NAMESPACE:-gitops-vms}"
-ARGOCD_APP_NAME="${ARGOCD_APP_NAME:-rdr}"
+ARGOCD_APP_NAME="${ARGOCD_APP_NAME:-regional-dr}"
+ARGOCD_APP_NAMESPACE="${ARGOCD_APP_NAMESPACE:-ramendr-starter-kit-hub}"
 MAX_ATTEMPTS=60  # 1 hour with 1 minute intervals
 SLEEP_INTERVAL=60  # 1 minute between checks
 
@@ -206,38 +207,16 @@ check_k8s_objects_health() {
 
 # Function to disable ArgoCD sync for the application
 disable_argocd_sync() {
-  echo "Disabling ArgoCD sync for application $ARGOCD_APP_NAME..."
+  echo "Disabling ArgoCD sync for application $ARGOCD_APP_NAME in namespace $ARGOCD_APP_NAMESPACE..."
   
-  # First, check if the Application exists
-  local app_namespace="argocd"  # Default ArgoCD namespace
-  local app_found=false
-  
-  # Try to find the Application in common namespaces
-  for ns in argocd openshift-gitops; do
-    if oc get application "$ARGOCD_APP_NAME" -n "$ns" &>/dev/null; then
-      app_namespace="$ns"
-      app_found=true
-      echo "  Found ArgoCD Application $ARGOCD_APP_NAME in namespace $app_namespace"
-      break
-    fi
-  done
-  
-  if [[ "$app_found" == "false" ]]; then
-    echo "  ⚠️  ArgoCD Application $ARGOCD_APP_NAME not found in common namespaces"
-    echo "  Attempting to find it in all namespaces..."
-    
-    # Search all namespaces for the Application
-    local found_ns=$(oc get application --all-namespaces -o jsonpath="{range .items[?(@.metadata.name==\"$ARGOCD_APP_NAME\")]}{.metadata.namespace}{end}" 2>/dev/null || echo "")
-    
-    if [[ -n "$found_ns" ]]; then
-      app_namespace="$found_ns"
-      app_found=true
-      echo "  Found ArgoCD Application $ARGOCD_APP_NAME in namespace $app_namespace"
-    else
-      echo "  ❌ ArgoCD Application $ARGOCD_APP_NAME not found"
-      return 1
-    fi
+  # Check if the Application exists in the specified namespace
+  if ! oc get application "$ARGOCD_APP_NAME" -n "$ARGOCD_APP_NAMESPACE" &>/dev/null; then
+    echo "  ❌ ArgoCD Application $ARGOCD_APP_NAME not found in namespace $ARGOCD_APP_NAMESPACE"
+    return 1
   fi
+  
+  echo "  Found ArgoCD Application $ARGOCD_APP_NAME in namespace $ARGOCD_APP_NAMESPACE"
+  local app_namespace="$ARGOCD_APP_NAMESPACE"
   
   # Check current sync policy
   local current_sync_policy=$(oc get application "$ARGOCD_APP_NAME" -n "$app_namespace" -o jsonpath='{.spec.syncPolicy}' 2>/dev/null || echo "")

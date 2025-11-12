@@ -44,7 +44,9 @@ spec:
         - name: PROTECTED_NAMESPACE
           value: "gitops-vms"
         - name: ARGOCD_APP_NAME
-          value: "rdr"
+          value: "regional-dr"
+        - name: ARGOCD_APP_NAMESPACE
+          value: "ramendr-starter-kit-hub"
         - name: KUBECONFIG
           value: ""
 
