@@ -266,7 +266,8 @@ find_submariner_security_group() {
   local cluster="$1"
   local infra_name="$2"
   
-  echo "  Finding Submariner security group for cluster $cluster..."
+  # Send debug messages to stderr so they don't interfere with stdout output
+  echo "  Finding Submariner security group for cluster $cluster..." >&2
   
   # Submariner security groups are typically tagged with submariner-related tags
   # Look for security groups with submariner tags or names
@@ -310,11 +311,12 @@ find_submariner_security_group() {
   fi
   
   if [[ -z "$sg_id" || "$sg_id" == "None" ]]; then
-    echo "  ❌ Could not find Submariner security group for cluster $cluster"
+    echo "  ❌ Could not find Submariner security group for cluster $cluster" >&2
     return 1
   fi
   
-  echo "  ✅ Found Submariner security group: $sg_id"
+  echo "  ✅ Found Submariner security group: $sg_id" >&2
+  # Only output the sg_id to stdout (for capture)
   echo "$sg_id"
   return 0
 }
