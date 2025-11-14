@@ -336,10 +336,13 @@ tag_security_group() {
     return 1
   fi
   
-  echo "  Tagging security group $sg_id with kubernetes.io/cluster/${infra_name}=owned..."
-  
+  # Construct the tag key and value
   local tag_key="kubernetes.io/cluster/${infra_name}"
   local tag_value="owned"
+  
+  echo "  Tagging security group $sg_id"
+  echo "    Tag Key: $tag_key"
+  echo "    Tag Value: $tag_value"
   
   # Check if tag already exists
   local existing_tag=$(aws ec2 describe-tags \
