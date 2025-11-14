@@ -16,8 +16,8 @@ metadata:
   namespace: {{ .name }}-broker
   annotations:
     argocd.argoproj.io/sync-wave: "6"
-spec: {}
-#  globalnetEnabled: {{ $globalnetEnabled | default false }}
+spec:
+  globalnetEnabled: {{ $globalnetEnabled | default false }}
 
 
 {{- range list .clusters.primary .clusters.secondary }}
