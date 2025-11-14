@@ -16,7 +16,7 @@ spec:
       restartPolicy: OnFailure
       containers:
       - name: sg-tagger
-        image: quay.io/validatedpatterns/utility-contaiiner:latest
+        image: quay.io/validatedpatterns/utility-container:latest
         command:
         - /bin/bash
         - -c
