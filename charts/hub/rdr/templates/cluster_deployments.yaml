@@ -9,7 +9,7 @@ metadata:
   name: {{ $cluster.name }}
   labels:
     cluster.open-cluster-management.io/managedCluster: {{ $cluster.name }}
-    kubernetes.io/metadata.name: ocp-primary	    kubernetes.io/metadata.name: {{ $cluster.name }}
+    kubernetes.io/metadata.name: {{ $cluster.name }}
     open-cluster-management.io/cluster-name: {{ $cluster.name }}
     pod-security.kubernetes.io/audit: restricted
     pod-security.kubernetes.io/audit-version: latest
