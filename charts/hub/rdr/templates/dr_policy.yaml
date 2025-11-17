@@ -12,6 +12,8 @@ metadata:
   name: {{ $name }}
   annotations:
     argocd.argoproj.io/sync-wave: "8"
+  labels:
+    cluster.open-cluster-management.io/backup: ramen
 spec:
   drClusters:
   - {{ $clusters.primary.name }}
