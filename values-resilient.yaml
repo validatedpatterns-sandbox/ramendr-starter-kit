@@ -119,8 +119,11 @@ clusterGroup:
       name: external-dns-operator
       namespace: external-dns-operator
       project: resilient
-      chart: external-dns-operator
-      chartVersion: 0.1.*
+      #chart: external-dns-operator
+      #chartVersion: 0.1.*
+      repoURL: https://github.com/validatedpatterns/external-dns-operator-chart.git
+      path: "."
+      chartVersion: fqdn_template_value
     
     adp-data-protection:
       name: adp-data-protection-application
