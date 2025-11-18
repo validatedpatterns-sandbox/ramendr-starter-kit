@@ -1,4 +1,4 @@
-clusterGroup:
+elusterGroup:
   name: hub
   isHubCluster: true
   namespaces:
@@ -111,6 +111,13 @@ clusterGroup:
         argocd.argoproj.io/sync-wave: "10"
       syncPolicy:
         automated: {}
+        # We have to wait for the clusters to build, whcih can take a long time
+        retry:
+          limit: 60
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m
         syncOptions:
           - RespectIgnoreDifferences=true
       ignoreDifferences:

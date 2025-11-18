@@ -795,14 +795,28 @@ with open('$WORK_DIR/ramen-configmap-updated.yaml', 'w') as f:
         VERIFICATION_PASSED=false
         VERIFICATION_ERRORS+=("Not all s3StoreProfiles items have caCertificates (found $PROFILE_COUNT profiles but only $CA_CERT_COUNT caCertificates)")
       fi
+      
+      # CRITICAL: Verify all profiles have caCertificates (exact match required)
+      if [[ $PROFILE_COUNT -gt 0 && $CA_CERT_COUNT -ne $PROFILE_COUNT ]]; then
+        VERIFICATION_PASSED=false
+        VERIFICATION_ERRORS+=("CRITICAL: All $PROFILE_COUNT profile(s) must have caCertificates, but only $CA_CERT_COUNT have it")
+      fi
     else
       VERIFICATION_PASSED=false
       VERIFICATION_ERRORS+=("s3StoreProfiles section not found in ConfigMap")
     fi
     
+    # Additional explicit check before declaring success
+    PROFILE_COUNT=${PROFILE_COUNT:-0}
+    CA_CERT_COUNT=${CA_CERT_COUNT:-0}
+    if [[ $PROFILE_COUNT -lt $MIN_REQUIRED_PROFILES || $CA_CERT_COUNT -lt $MIN_REQUIRED_PROFILES ]]; then
+      VERIFICATION_PASSED=false
+      VERIFICATION_ERRORS+=("CRITICAL: Must have at least $MIN_REQUIRED_PROFILES s3StoreProfiles with caCertificates, but found $PROFILE_COUNT profiles and $CA_CERT_COUNT caCertificates")
+    fi
+    
     if [[ "$VERIFICATION_PASSED" == "true" ]]; then
       echo "  ✅ ramen-hub-operator-config updated and verified successfully"
-      echo "     caCertificates added to all s3StoreProfiles items"
+      echo "     caCertificates added to all s3StoreProfiles items ($PROFILE_COUNT profiles, $CA_CERT_COUNT caCertificates)"
       echo "     CA bundle base64 data verified in ConfigMap"
     else
       echo "  ❌ CRITICAL: ramen-hub-operator-config update verification FAILED"
@@ -927,14 +941,28 @@ with open('$WORK_DIR/ramen-patch.json', 'w') as f:
                 VERIFICATION_PASSED=false
                 VERIFICATION_ERRORS+=("Not all profiles have caCertificates ($PROFILE_COUNT profiles, $CA_CERT_COUNT caCertificates)")
               fi
+              
+              # CRITICAL: Verify all profiles have caCertificates (exact match required)
+              if [[ $PROFILE_COUNT -gt 0 && $CA_CERT_COUNT -ne $PROFILE_COUNT ]]; then
+                VERIFICATION_PASSED=false
+                VERIFICATION_ERRORS+=("CRITICAL: All $PROFILE_COUNT profile(s) must have caCertificates, but only $CA_CERT_COUNT have it")
+              fi
             else
               VERIFICATION_PASSED=false
               VERIFICATION_ERRORS+=("s3StoreProfiles section not found in ConfigMap")
             fi
             
+            # Additional explicit check before declaring success
+            PROFILE_COUNT=${PROFILE_COUNT:-0}
+            CA_CERT_COUNT=${CA_CERT_COUNT:-0}
+            if [[ $PROFILE_COUNT -lt $MIN_REQUIRED_PROFILES || $CA_CERT_COUNT -lt $MIN_REQUIRED_PROFILES ]]; then
+              VERIFICATION_PASSED=false
+              VERIFICATION_ERRORS+=("CRITICAL: Must have at least $MIN_REQUIRED_PROFILES s3StoreProfiles with caCertificates, but found $PROFILE_COUNT profiles and $CA_CERT_COUNT caCertificates")
+            fi
+            
             if [[ "$VERIFICATION_PASSED" == "true" ]]; then
               echo "  ✅ ramen-hub-operator-config updated using oc patch approach"
-              echo "     CA material verified in all s3StoreProfiles items"
+              echo "     CA material verified in all s3StoreProfiles items ($PROFILE_COUNT profiles, $CA_CERT_COUNT caCertificates)"
             else
               echo "  ❌ CRITICAL: oc patch applied but verification FAILED"
               echo "     The CA material has NOT been properly added to s3StoreProfiles"
@@ -1283,6 +1311,29 @@ else
   FINAL_VERIFICATION_ERRORS+=("s3StoreProfiles section not found in ConfigMap")
 fi
 
+# Additional explicit check: Must have at least 2 profiles with caCertificates
+# Initialize variables if they weren't set (e.g., if s3StoreProfiles section was missing)
+FINAL_PROFILE_COUNT=${FINAL_PROFILE_COUNT:-0}
+FINAL_CA_CERT_COUNT=${FINAL_CA_CERT_COUNT:-0}
+
+# CRITICAL: Explicitly verify we have at least 2 profiles
+if [[ $FINAL_PROFILE_COUNT -lt $MIN_REQUIRED_PROFILES ]]; then
+  FINAL_VERIFICATION_PASSED=false
+  FINAL_VERIFICATION_ERRORS+=("CRITICAL: Must have at least $MIN_REQUIRED_PROFILES s3StoreProfiles, but found only $FINAL_PROFILE_COUNT")
+fi
+
+# CRITICAL: Verify all profiles have caCertificates
+if [[ $FINAL_PROFILE_COUNT -gt 0 && $FINAL_CA_CERT_COUNT -ne $FINAL_PROFILE_COUNT ]]; then
+  FINAL_VERIFICATION_PASSED=false
+  FINAL_VERIFICATION_ERRORS+=("CRITICAL: All $FINAL_PROFILE_COUNT profile(s) must have caCertificates, but only $FINAL_CA_CERT_COUNT have it")
+fi
+
+# CRITICAL: Verify we have exactly the required number of profiles with certificates
+if [[ $FINAL_PROFILE_COUNT -ne $FINAL_CA_CERT_COUNT ]]; then
+  FINAL_VERIFICATION_PASSED=false
+  FINAL_VERIFICATION_ERRORS+=("CRITICAL: Profile count ($FINAL_PROFILE_COUNT) does not match caCertificates count ($FINAL_CA_CERT_COUNT)")
+fi
+
 if [[ "$FINAL_VERIFICATION_PASSED" != "true" ]]; then
   echo "  ❌ CRITICAL: Final verification FAILED - ramen-hub-operator-config is NOT complete and correct"
   echo "     The CA material has NOT been properly added to s3StoreProfiles"
@@ -1297,9 +1348,16 @@ if [[ "$FINAL_VERIFICATION_PASSED" != "true" ]]; then
   handle_error "Final verification failed - ramen-hub-operator-config is not complete and correct - CA material not in s3StoreProfiles"
 fi
 
+# Final explicit check before declaring success
+if [[ $FINAL_PROFILE_COUNT -lt $MIN_REQUIRED_PROFILES || $FINAL_CA_CERT_COUNT -lt $MIN_REQUIRED_PROFILES ]]; then
+  echo "  ❌ CRITICAL: Final verification FAILED - insufficient profiles"
+  echo "     Found $FINAL_PROFILE_COUNT profile(s) and $FINAL_CA_CERT_COUNT caCertificates, but at least $MIN_REQUIRED_PROFILES are required"
+  handle_error "Final verification failed - ramen-hub-operator-config is not complete and correct - insufficient s3StoreProfiles"
+fi
+
 echo "  ✅ Final verification passed: ramen-hub-operator-config is complete and correct"
-echo "     - s3StoreProfiles found: $FINAL_PROFILE_COUNT profile(s)"
-echo "     - caCertificates found: $FINAL_CA_CERT_COUNT certificate(s)"
+echo "     - s3StoreProfiles found: $FINAL_PROFILE_COUNT profile(s) (required: at least $MIN_REQUIRED_PROFILES)"
+echo "     - caCertificates found: $FINAL_CA_CERT_COUNT certificate(s) (required: at least $MIN_REQUIRED_PROFILES)"
 echo "     - CA bundle base64 data verified in all profiles"
 
 echo ""
